@@ -1,26 +1,12 @@
-{\rtf1\ansi\ansicpg936\cocoartf1504\cocoasubrtf820
-{\fonttbl\f0\fnil\fcharset134 PingFangSC-Regular;\f1\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\paperw11900\paperh16840\margl1440\margr1440\vieww16100\viewh10600\viewkind0
-\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+使用方式：
+下载带有进度条的类
+	两种方式：该类实现 DownloadView 接口
+			DownloadFileWithProgressMode.instance(this).downloadWithProgress(“url”);
 
-\f0\fs24 \cf0 \'ca\'b9\'d3\'c3\'b7\'bd\'ca\'bd\'a3\'ba\
-\'cf\'c2\'d4\'d8\'b4\'f8\'d3\'d0\'bd\'f8\'b6\'c8\'cc\'f5\'b5\'c4\'c0\'e0
-\f1 \
-	
-\f0 \'c1\'bd\'d6\'d6\'b7\'bd\'ca\'bd\'a3\'ba\'b8\'c3\'c0\'e0\'ca\'b5\'cf\'d6 DownloadView \'bd\'d3\'bf\'da\
-			DownloadFileWithProgressMode.instance(this).downloadWithProgress(\'a1\'b0url\'a1\'b1);\
-\
-			DownloadFileWithProgressMode.instance(new DownloadView() \{\
-						method()\
-					\}).downloadWithProgress(\'a1\'b0url\'a1\'b1);\
+			DownloadFileWithProgressMode.instance(new DownloadView() {
+						method()
+					}).downloadWithProgress(“url”);
 
-\f1 \
-\
 
-\f0 \'cf\'c2\'d4\'d8\'b2\'bb\'b4\'f8\'bd\'f8\'b6\'c8\'cc\'f5\'b5\'c4\'c0\'e0\'a3\'ba
-\f1 \
-	
-\f0 DownloadFileMode.getInstance().downloadFile(\'a1\'b0url\'a1\'b1);\
-}
+下载不带进度条的类：
+	DownloadFileMode.getInstance().downloadFile(“url”);
