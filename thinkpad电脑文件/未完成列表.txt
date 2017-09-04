@@ -1,0 +1,184 @@
+长草接口以调通，回调有问题----
+
+购物车数量问题----------
+
+直接购买跳转------------
+
+相关文章页面------------
+
+购物车数量最多99+-----
+
+选择属性页面无货背景为灰色----
+
+选择实时刷新价格-----
+
+刷新购物车数量------
+
+选择属性在选择购买时需要判断库存----待测试---
+
+商品详情页图片显示问题---现在是修改为宽高比显示---
+
+弹出框选择信息，更新详情页的选中信息---
+
+调全部评价页面布局问题……------
+
+购物车中的数量如何实时刷新（何时将本地的购物车数据与网络合并）---------
+
+属性选择框点击确定的返回数据---------------
+
+立即购买传递数据-----------
+
+商品详情页分享-----
+
+有网情况下加入购物车接口参数-----
+
+加入购物车默认数据赋值---
+
+返回的评论内容为空，无法解析(解决)-----
+
+点击加入购物车，没有选择属性值，默认弹出选择框（逻辑确定）如下逻辑---
+例子：京东是外面加入购物车会弹出选择属性，确定后加入购物车
+直接点击选择属性，弹出框为加入购物车
+
+商品下架状态------
+
+长草功能，登录和未登录状态切换------
+
+showLoadNoMore()-----
+
+全部评价隐藏--
+
+置顶按钮还是没有--
+
+商品详情页的标题栏添加底部分隔线--
+
+商品详情页的分享文案不对--
+
+分享的平台顺序调整--
+
+分享的边框去除--
+
+评论为空显示0---
+
+
+
+
+商品详情页图片显示问题---现在是修改为宽高比显示
+
+布局调整UI
+
+有图评价为空的问题
+
+商品下架选择属性模块隐藏--
+
+全部评价页面评价内容显示的条数问题--（数据返回问题）
+
+属性选择框中默认选中的为第一条有效的数据--
+
+isPuton的判断--
+
+登录页面问题
+
+商品详情页返回按钮--
+
+
+
+价钱全部改为bigDiceml--
+
+修改属性选择框中数量增加和减少的问题（测试数量的返回是否正确）--
+
+
+修改首页和帖子详情页的fab按钮----
+
+修改gradleversion.txt文件--
+
+修改评价页面的问题--
+
+修改onError方法--
+
+========ui===========
+
+选择属性框中的间距一样---
+
+
+=======================
+标题字体过多问题==
+
+属性选择框里面标题字多，已选离得太近==
+
+价格显示问题==（结算页价格显示的问题）
+
+超过库存置灰，toast提示：当前商品最大购买数量为x件----
+
+点击切换选择时刷新库存（选择其他属性时将个数为1）----
+
+==========================================
+
+确定首页的种草布局的使用======
+
+购物车问题说明======
+
+属性选择中的逻辑问题
+
+1、boolean checkId(String string, int position){}：方法
+遍历所有组合中的组合ID是否包含当前属性的ID
+可以将此方法里面的实现换成String.contains()方法实现（数据正确的情况下）
+
+
+
+将商品详情页的图片进行等比例压缩（压缩过大会导致失真###）-------
+                load(Uri.parse(itemDetailBean.getContent()), view, Integer.parseInt(split[0]), Integer.parseInt(split[1]));
+                load(Uri.parse(itemDetailBean.getContent()), view, Integer.parseInt(split[0]) / 2, Integer.parseInt(split[1]) / 2);
+
+
+
+
+===========================================
+全部评论页面布局在点击查看图片后返回当前页面后会滑动
+问题描述：在7.0系统中出现，在5.0系统出现不明显
+点击图片跳转到查看图片页面会出现
+点击图片跳转到其他页面不会出现
+
+解决办法：
+	1、嵌套NestScrollView（无效）
+	2、将内部布局改为RecycleView添加头部的方式（可以解决进来不在顶部的问题，不能解决滑动问题）
+	3、试用记录滑动状态的方式（无效）
+	4、将RecycleView改为固定数量的ImageView（可以解决，不太优雅）
+
+
+=========================================================
+加入购物车数据保存本地问题（未登录状态下）
+
+private void addItemToCart(long skuId, int buyNum) {
+        boolean isInclude = false;
+        String cartList = SettingUtils.instance().getShoppingCartList();
+        List<AddItemsToCartBean> itemList;
+
+        if (!TextUtils.isEmpty(cartList)) {
+            itemList = gson.fromJson(cartList, new TypeToken<List<AddItemsToCartBean>>() {}.getType());
+
+            for (int i = 0; i < itemList.size(); i++) {
+                if (itemList.get(i).getSkuId() == skuId) {
+                    isInclude = true;
+                    int quantity = itemList.get(i).getQuantity();
+                    itemList.get(i).setQuantity(quantity + buyNum);
+                    break;
+                }
+            }
+
+            if (!isInclude) {
+                AddItemsToCartBean bean = new AddItemsToCartBean(skuId, buyNum);
+                itemList.add(bean);
+            }
+
+        } else {
+            itemList = new ArrayList<>();
+            AddItemsToCartBean bean = new AddItemsToCartBean(skuId, buyNum);
+            itemList.add(bean);
+        }
+
+        String s = gson.toJson(itemList);
+
+        SettingUtils.instance().saveShoppingCartList(s);
+    }
+==============================================================

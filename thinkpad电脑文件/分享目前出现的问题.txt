@@ -1,0 +1,308 @@
+分享目前所有的问题：
+
+shareSdk出现的问题：
+	1、shareSDK使用的appkey是本人自己的，需要重新申请一个公司账号的(注册一个)
+	4、测试使用的appkey和正式使用的appkey不一样，如何动态切换
+	5、如何动态设置微信和朋友圈的key合secret(分debug和release版)
+	对于4和5的问题在删除掉所有有关分享的内容删除新浪的SDK后进行测试（已经设置好）
+	
+	目前状态：微博，微信，朋友圈均可分享成功，分享内容：标题，内容，图片，链接
+
+Umeng出现的问题：不符合设计要求
+	1、qq和Qzone分享目前缺少key(创建应用)
+
+
+	目前状态：新浪（先下载本地），微信，朋友圈分享成功，分享内容：标题，内容，图片，链接
+
+第三方登录：
+	微信授权和新浪授权均可
+
+
+需求：
+	将分享直接单独放在一个activity中
+	将activity设置为一个dialog的形式进行展示
+	
+	分享状态的提示问题
+
+PlatformConfig.setWeixin(Utils.getWechatAPIKey(), Utils.getWechatAPISecret());
+        PlatformConfig.setSinaWeibo("655400735", "f5513a5b2e8cf8f4c08a38f32df89246", "https://api.weibo.com/oauth2/default.html");
+        PlatformConfig.setQQZone("1104761849", "JGHsG5OP5IzM7iVb");
+
+分享的问题：
+	注册shareSDK账号，并创建应用--
+	测试将分享封装成一个activity中--驳回
+	删除以前分享和三方登录的代码
+	测试4和5的问题，即在正式和测试环境下进行测试
+	加入新的分享代码
+	加入新的三方登录问题
+
+目前分享的状态：
+	5个平台均可分享成功---
+	shareSDK的appkey使用公司账号申请的--
+	分别测试正式和测试环境下的分享成功问题
+
+
+分享目前的问题：
+	1、qq分享图片需要下载到本地再进行分享
+	2、分享类型（目前默认是图文分享，还有一种是只分享图片内容）
+	4、提取文字到 String.xml 中
+
+
+
+
+=================================
+	1、qq分享可以下载到本地再进行分享，然后分享后将图片删除（是否需要）
+	2、分享类型（目前默认是图文分享，还有一种是只分享图片内容）
+	3、有客户端情况正常，无客户端情况下qq和微博可以调起网页版，微信、朋友圈、qq空间不行
+	4、正式环境测试
+	5、删除以前分享
+	6、登录授权问题
+
+==============分享已改页面=================
+GuestEditorGuideActivity
+UserProfileActivity
+ApplyTrialDetailsActivity
+ApplyTrialNextActivity
+CosmeticTrialDetailsActivity
+ReportDetailActivity
+SalonBeautyDetailsActivity
+SpecialListActivity
+PointsProductDetailsActivity
+WorkDetailsActivity
+MyCouponsActivity（有点慢）
+AboutDresserActivity
+DresserWorksActivity
+SeedProductDetailsActivity
+
+HeadPhotoHTMLActivity
+
+ArticlesDetailsFragment
+ArticlesDetailsActivity
+VideosDetailsActivity
+VideoDetailsFragment
+
+
+
+CheckInShareBaseActivity（最后修改）（样式不确定暂时不改）
+
+
+=============第三方登录================
+微信，新浪登录成功
+
+AccountBindSetting（设置里面的绑定设置）
+LoginActivity
+
+
+===================================
+
+在登录成功后，注销账号，点击返回时一直要求登录
+
+===================================
+
+登录    第三方登录
+微信    1、点击登录  确认登录会又跳出一个登录页面---登录成功    
+	然后注销 再用微信登录直接回到桌面
+             
+	2、点击登录 确认登录   直接回到桌面============
+
+
+微博    
+1、点击登录 输入用户名密码点击登录  又跳出一个登录模块 然后登录成功   
+点击注销 再次使用微博登录  需要再次输入用户名密码====未安装状态下的跳转到h5的页面
+
+
+ 所有的分享  app不登录可以分享成功但是不加积分===========正确
+
+
+分享
+首页轮播图分享到（微信朋友圈）1、分享成功后加积分没有+号====
+  		（微信好友） 1、分享成功后加积分没有+号=====
+
+
+   （微博）1、手机没有安装微博，分享到微博时无提示
+
+
+     （qq好友）1、分享成功后，点击返回南瓜姑娘 没有加积分并且“我的”那分享次数也没有增加（每天上限五次）========
+  	2、分享成功后，所分享内容的logo没有测试俩字========
+
+
+（qq空间）1、分享成功后没有加积分并且“我的”那分享次数没有增加========
+
+
+ （复制链接） 成功后的页面为h5页面   -----正确
+
+ 轮播图第二页
+（微信朋友圈）1、分享成功后不加积分  “我的”那分享次数没有增加
+	微信好友 qq好友  qq空间  分享都不加积分 =======================(明天调试)
+
+
+  复制链接那正确
+
+第三张同第一张
+第五张  六张同第二张
+
+
+分享时  如果手机未安装qq或微信 微博  
+会有提示提示为手机未安装XXX 请安装XXX再分享======
+
+
+帖子文章详情页面
+分享（微信朋友圈、微信、微博）分享成功 加积分但没有+号
+        （qq好友、qq空间）分享成功  不加积分
+帖子详情分享跟文章详情一样
+ 南瓜社区 免费分享分享同上
+南瓜社区  有奖活动 分享同上
+南瓜社区 话题详情 分享同上
+上门美妆 作品详情页分享同上
+化妆师主页分享同上
+“我的” 关注 分享同上
+“我的”帖子分享同上
+“我的”积分商城 商品兑换分享同上
+“我的”南瓜券  分享邀请码同上
+“我的”我的收藏 --帖子、妆容分享同上
+“我的”长草清单 同上
+===================================================
+
+登录页
+   1、 微信、微博  每次确认登录都在出现一次登录页======15931654208
+
+  分享
+2、轮播图第一张图片分享（微博）分享出去的文案不对  应该是吧标题分享出去，这把内容都分享出去了
+   3、所有热门话题内容比较多的分享到（微博）分享出去的文案不对  应该是吧标题分享出去，这把内容都分享出去了
+
+  化妆师主页作品  一点击就会崩   “我的”关注那   化妆师作品一样
+
+====================================
+
+1、账号登录，然后注销，然后微信登录偶尔会出现登录失败
+  2、用微博登录 然后注销 用微信登录  会出现登录失败    就是昨天那样
+
+======================================
+
+/*==============登录==============*/
+    public void loginWithSina() {
+        loginWithPlatform(SinaWeibo.NAME);
+    }
+
+    public void loginWithWechat() {
+        loginWithPlatform(Wechat.NAME);
+    }
+
+    /**
+     * 开启 SSO (Single Sign-On)就是使用目标平台客户端来完成授权。
+     *
+     * @param platform
+     */
+    private void loginWithPlatform(String platform) {
+        Platform pf = ShareSDK.getPlatform(platform);
+
+        pf.setPlatformActionListener(loginLinstener);
+
+        pf.SSOSetting(false);//设置false表示使用SSO授权方式
+
+        //authorize与showUser单独调用一个即可
+        pf.authorize();//单独授权,OnComplete返回的hashmap是空的
+        pf.showUser(null);//授权并获取用户信息
+
+        //移除授权
+        //weibo.removeAccount(true);
+    }
+
+    PlatformActionListener loginLinstener = new PlatformActionListener() {
+        @Override
+        public void onComplete(Platform platform, int i, HashMap<String, Object> hashMap) {
+            Log.e("===platform=====" + platform, "=====登录成功======");
+        }
+
+        @Override
+        public void onError(Platform platform, int i, Throwable throwable) {
+            Log.e("===platform=====" + platform, "=====登录失败======" + i + throwable.getMessage());
+        }
+
+        @Override
+        public void onCancel(Platform platform, int i) {
+            Log.e("===platform=====" + platform, "=====取消登录======");
+        }
+    };
+
+    /**
+     * 这里是先判断是否已经授权
+     * 如果授权则删除授权资料再授权
+     * 否则直接授权
+     */
+    private void checkValid(String pl) {
+        Platform platform = ShareSDK.getPlatform(pl);
+        if (platform.isAuthValid()) {
+            platform.removeAccount(true);
+        }
+        platform.setPlatformActionListener(loginLinstener);
+        //authorize与showUser单独调用一个即可
+        platform.authorize();//单独授权，OnComplete返回的hashmap是空的
+        platform.showUser(null);//授权并获取用户信息
+        //isValid和removeAccount不开启线程，会直接返回。
+    }
+
+    public void checkLoginWithWechat() {
+        checkValid(Wechat.NAME);
+    }
+
+    public void checkLoginWithSina() {
+        checkValid(SinaWeibo.NAME);
+    }
+
+
+====================下载到本地，然后分享的方法================================
+// TODO: 2017/3/10 暂时使用，以后替换
+    private String file = "/storage/emulated/0/DCIM/Camera/";
+    private String fileStr = "";
+    private void download() {
+        OkGo.get(shareImageLink)
+                .tag(context)
+                .execute(new FileCallback() {
+                    @Override
+                    public void onSuccess(File file, Call call, Response response) {
+                        // file 即为文件数据，文件保存在指定目录
+
+                        File afterfile = new File(fileStr);
+                        if (afterfile.exists()) {
+                            afterfile.delete();
+                        }
+
+                        FileInputStream fis = null;
+                        FileOutputStream fos = null;
+                        try {
+                            fis = new FileInputStream(file);
+                            fos = new FileOutputStream(afterfile);
+
+                            byte[] b = new byte[1024];
+                            while (fis.read(b) != -1) {
+                                fos.write(b);
+                                fos.flush();
+                            }
+                            Log.e("=======", "=======");
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    @Override
+                    public void downloadProgress(long currentSize, long totalSize, float progress, long networkSpeed) {
+                        //这里回调下载进度(该回调在主线程,可以直接更新ui)
+                        Log.e("=========", "========" + progress);
+                    }
+                });
+    }
+
+
+
+
+String[] split = shareImageLink.split("/");
+        fileStr = file + split[split.length - 1];
+
+        download();
+
+
+File file = new File(fileStr);
+            if (file.exists()) {
+                file.delete();
+            }

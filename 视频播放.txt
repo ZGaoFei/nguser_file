@@ -1,0 +1,510 @@
+
+
+
+=============================================================
+
+package cn.com.nggirl.nguser.utils.surfaceviewutils;
+
+import android.content.Context;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.AnimationDrawable;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.os.Handler;
+import android.os.Message;
+import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
+
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import cn.com.nggirl.commons.DensityUtils;
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.ui.activity.articles.VideosDetailsActivity;
+
+public class SurfaceViewUtils {
+    private SurfaceView surfaceView;
+    private SurfaceHolder surfaceHolder;
+    private MediaPlayer mediaPlayer;
+    private String url;
+    private Context context;
+    private SeekBar seekBar;
+    private ImageView ivLoading;
+    private LinearLayout linearLayout;
+    private TextView tvTime;
+    private String allTime;
+    private AnimationDrawable animationDrawable;
+    private Handler handler;
+    // 屏幕宽高
+    private float width;
+    private float height;
+    private float svHeight;
+
+    private boolean seekBarAuto;//判断进度条是否运行
+    private boolean isDestory;//判断surfaceview是否destroy
+    private boolean isAll;//是否播放完视频
+    private boolean isRun = true;//视频是否在播放状态
+    private boolean isPause;//是否进入下一个页面或者点击home键（是否执行onPause()方法）
+    private boolean isPrepared;//视频是否加载完
+
+    private AudioManager mAudioManager;
+    private TextView tvSpeed;
+    private ImageView ivSpeed;
+    private SurfaceViewProgressBar pbVolume;
+    private SurfaceViewProgressBar pbLight;
+
+    private int currentPosition = -1;
+
+    public SurfaceViewUtils(String url, Context context, Handler handler) {
+        this.url = url;
+        this.context = context;
+        this.handler = handler;
+    }
+
+    public void setLayout(SurfaceView surfaceView, SeekBar seekBar, ImageView ivLoading, LinearLayout linearLayout, TextView textView) {
+        this.surfaceView = surfaceView;
+        this.seekBar = seekBar;
+        this.ivLoading = ivLoading;
+        this.linearLayout = linearLayout;
+        this.tvTime = textView;
+        svHeight = surfaceView.getHeight();
+
+        startAnimation();
+        init();
+        playVideo();
+    }
+
+    public void setTouchView(TextView tvSpeed, ImageView ivSpeed, SurfaceViewProgressBar pbVolume, SurfaceViewProgressBar pbLight) {
+        this.tvSpeed = tvSpeed;
+        this.ivSpeed = ivSpeed;
+        this.pbVolume = pbVolume;
+        this.pbLight = pbLight;
+    }
+
+//================核心开始=================
+// ====================主要部分=====设置surfaceHolder==============
+    private void init(){
+        surfaceHolder = surfaceView.getHolder();
+        surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
+        surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        surfaceHolder.addCallback(new Callback());
+
+        surfaceHolder.setKeepScreenOn(true);
+
+        seekBar.setOnSeekBarChangeListener(new SeekBarChangeListener());
+
+        width = DensityUtils.getWidthInPx(context);
+        height = DensityUtils.getHeightInPx(context);
+
+        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+//启动动画可以不看
+    private void startAnimation() {
+        linearLayout.setVisibility(View.VISIBLE);
+        ivLoading.setVisibility(View.VISIBLE);
+        ivLoading.setImageResource(R.drawable.video_loading);
+        animationDrawable = ((AnimationDrawable)ivLoading.getDrawable());
+        animationDrawable.start();
+    }
+
+//========主要部分=====设置MediaPlayer======================
+    private void playVideo() {
+        mediaPlayer = new MediaPlayer();
+        mediaPlayer.reset();
+        mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        mediaPlayer.setScreenOnWhilePlaying(true);
+        mediaPlayer.setDisplay(surfaceHolder);
+
+        mediaPlayer.setOnCompletionListener(new OnCompletionListener());
+        mediaPlayer.setOnPreparedListener(new OnPreparedListener());
+        mediaPlayer.setOnErrorListener(new OnErrorListener());
+        mediaPlayer.setOnBufferingUpdateListener(new OnBufferingUpdateListener());
+
+        try {
+            mediaPlayer.setDataSource(url);
+            mediaPlayer.prepareAsync();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+//============播放操作==============
+    public void play(){
+        mediaPlayer.start();
+        isRun = true;
+        if (isAll) {
+            seekBarAuto = true;
+            new Thread(runnable).start();
+        }
+    }
+//============停止操作==============
+    public void stop(){
+        mediaPlayer.stop();
+    }
+//============暂停操作==============
+    public void pause() {
+        if (mediaPlayer.isPlaying()) {
+            isRun = false;
+            mediaPlayer.pause();
+        }
+    }
+//============清理==============
+    private void clear() {
+        seekBarAuto = false;
+        seekBar.clearFocus();
+
+        mediaPlayer = null;
+
+        surfaceHolder = null;
+
+        mAudioManager = null;
+
+        animationDrawable.stop();
+        animationDrawable = null;
+    }
+
+    //==========SurfaceHolder的监听============
+    private class Callback implements SurfaceHolder.Callback {
+
+        @Override
+        public void surfaceCreated(SurfaceHolder surfaceHolder) {
+            final Surface surface = surfaceHolder.getSurface();
+
+            if ( surface == null ) return;
+            /* is before 4.0 */
+            final boolean invalidSurfaceAccepted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH;
+            final boolean invalidSurface = ! surface.isValid();
+
+            if ( invalidSurface && ( ! invalidSurfaceAccepted ) ) return;
+
+            isDestory = false;
+
+            isPrepared = false;
+            setMessage(7);
+            setMessage(8);
+            startAnimation();
+            playVideo();
+
+        }
+
+        @Override
+        public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+        }
+
+        @Override
+        public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
+            isDestory = true;
+
+            surfaceView.clearFocus();
+            mediaPlayer.release();
+        }
+    }
+
+    /**
+     * 设置播放完成监听
+     */
+    private class OnCompletionListener implements MediaPlayer.OnCompletionListener {
+
+        @Override
+        public void onCompletion(MediaPlayer mediaPlayer) {
+            seekBarAuto = false;
+            setMessage(3);
+
+            mediaPlayer.seekTo(0);
+            seekBar.setProgress(0);
+            isAll = true;
+            isRun = false;
+
+        }
+    }
+
+    /**
+     * 设置媒体加载完成以后回调函数
+     */
+    private class OnPreparedListener implements MediaPlayer.OnPreparedListener {
+
+        @Override
+        public void onPrepared(MediaPlayer mediaPlayer) {
+            isPrepared = true;
+
+            seekBarAuto = true;
+            seekBar.setMax(mediaPlayer.getDuration());
+            allTime = formatTime(mediaPlayer.getDuration());
+            tvTime.setText("00:00/" + allTime);
+            new Thread(runnable).start();
+            mediaPlayer.start();
+
+            if (currentPosition > 0) {
+                mediaPlayer.seekTo(currentPosition);
+                currentPosition = -1;
+            }
+
+            setMessage(5);
+        }
+    }
+
+    /**
+     * 滑动条变化线程
+     */
+    private Runnable runnable = new Runnable() {
+
+        public void run() {
+            try {
+                while (seekBarAuto) {
+                    if (!isDestory) {
+                        if (null != mediaPlayer && mediaPlayer.isPlaying()) {
+                            final int currentPosition = mediaPlayer.getCurrentPosition();
+                            seekBar.setProgress(currentPosition);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    };
+
+    /**
+     * 错误监听回调函数
+     */
+    private class OnErrorListener implements MediaPlayer.OnErrorListener {
+
+        @Override
+        public boolean onError(MediaPlayer mediaPlayer, int i, int i1) {
+            setMessage(4);
+            mediaPlayer.stop();
+            linearLayout.setVisibility(View.VISIBLE);
+            surfaceView.clearFocus();
+            mediaPlayer.release();
+            animationDrawable.stop();
+            ivLoading.setVisibility(View.GONE);
+            return false;
+        }
+    }
+
+    /**
+     * 设置缓存变化监听
+     */
+    private class OnBufferingUpdateListener implements MediaPlayer.OnBufferingUpdateListener {
+
+        @Override
+        public void onBufferingUpdate(MediaPlayer mediaPlayer, int i) {
+        }
+    }
+
+    /**
+     * 监听进度条变化
+     */
+    private class SeekBarChangeListener implements SeekBar.OnSeekBarChangeListener{
+        @Override
+        public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            if (progress >= 0) {
+                if (fromUser) {
+                    mediaPlayer.seekTo(progress);
+
+                    if (!mediaPlayer.isPlaying()) {
+                        setMessage(2);
+                        mediaPlayer.start();
+                    }
+                }
+            }
+
+            if (!isDestory) {
+                tvTime.setText(formatTime(mediaPlayer.getCurrentPosition()) + "/" + allTime);
+            }
+        }
+
+        @Override
+        public void onStartTrackingTouch(SeekBar seekBar) {
+        }
+
+        @Override
+        public void onStopTrackingTouch(SeekBar seekBar) {
+        }
+    }
+
+//============在activity或者fragment的onPause()方法中调用============
+    public void onPause(){
+        try {
+            if (null != mediaPlayer) {
+                seekBarAuto = false;
+                isPause = true;
+                currentPosition = mediaPlayer.getCurrentPosition();
+                mediaPlayer.pause();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+//============在activity或者fragment的onResume()方法中调用============
+
+    public void onResume() {
+        seekBarAuto = true;
+        isPause = false;
+        if (!isDestory) {
+            if (mediaPlayer != null) {
+                if (isRun && !isDestory && isPrepared) {
+                    mediaPlayer.start();
+                    new Thread(runnable).start();
+                }
+
+                if (isRun) {
+                    setMessage(2);
+                } else {
+                    setMessage(3);
+                }
+            } else {
+                playVideo();
+            }
+        }
+    }
+//============在activity或者fragment的onDestroy()方法中调用============
+
+    public void onDestroy(){
+        try {
+            if (null != mediaPlayer) {
+                clear();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            // TODO IllegalStateException in MediaPlayer.isplaying() method
+            // http://stackoverflow.com/q/19357036/3962551
+        }
+    }
+
+//================核心结束=================
+
+
+    // 格式化时间
+    private String formatTime(long time) {
+        DateFormat formatter = new SimpleDateFormat("mm:ss");
+        return formatter.format(new Date(time));
+    }
+
+    // 设置横屏显示的宽和高
+    public void setScreenone(){
+        ViewGroup.LayoutParams lp = surfaceView.getLayoutParams();
+        lp.height = (int) DensityUtils.getWidthInPx(context);
+        lp.width = (int) DensityUtils.getHeightInPx(context);
+
+        surfaceView.setLayoutParams(lp);
+    }
+
+    // 设置竖屏显示的宽和高
+    public void setScreenTwo(){
+        ViewGroup.LayoutParams lp = surfaceView.getLayoutParams();
+        int h = (int) DensityUtils.getHeightInPx(context);
+        lp.height = (int) svHeight;
+        lp.width = h;
+
+        surfaceView.setLayoutParams(lp);
+    }
+//==========发送消息=====可以不看========
+    private void setMessage(int i) {
+        Message message = Message.obtain();
+        message.what = i;
+        handler.sendMessage(message);
+    }
+
+//============以下为音量和亮度和进度的手势调节=========================
+    /**
+     * 增加手势控制音量，亮度，进度
+     */
+    public void backward(float delataX) {
+        ivSpeed.setImageResource(R.drawable.icon_video_view_back);
+
+        int current = mediaPlayer.getCurrentPosition();
+        int backwardTime = (int) (delataX / width * mediaPlayer.getDuration());
+        int currentTime = current - backwardTime;
+        mediaPlayer.seekTo(currentTime);
+        seekBar.setProgress(currentTime * 100 / mediaPlayer.getDuration());
+        tvSpeed.setText(formatTime(currentTime) + "/" + allTime);
+    }
+
+    public void forward(float delataX) {
+        ivSpeed.setImageResource(R.drawable.icon_video_view_faward);
+
+        int current = mediaPlayer.getCurrentPosition();
+        int forwardTime = (int) (delataX / width * mediaPlayer.getDuration());
+        int currentTime = current + forwardTime;
+        if (currentTime >= mediaPlayer.getDuration()) {
+            mediaPlayer.seekTo(0);
+            seekBar.setProgress(0);
+            mediaPlayer.pause();
+            setMessage(3);
+        } else {
+            mediaPlayer.seekTo(currentTime);
+            seekBar.setProgress(currentTime);
+            tvSpeed.setText(formatTime(currentTime) + "/" + allTime);
+        }
+    }
+
+    public void volumeDown(float delatY) {
+        int max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int down = (int) (delatY / height * max * 3);
+        int volume = Math.max(current - down, 0);
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
+        int transformatVolume = volume * 100 / max;
+        pbVolume.setProgress(transformatVolume);
+    }
+
+    public void volumeUp(float delatY) {
+        int max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int up = (int) ((delatY / height) * max * 3);
+        int volume = Math.min(current + up, max);
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
+        int transformatVolume = volume * 100 / max;
+        pbVolume.setProgress(transformatVolume);
+    }
+
+    public void lightDown(float delatY) {
+        int down = (int) (delatY / height * 255 * 3);
+        int transformatLight = LightnessController.getLightness((VideosDetailsActivity) context) - down;
+        if (transformatLight <= 0) {
+            LightnessController.setLightness((VideosDetailsActivity) context, 0);
+            pbLight.setProgress(0);
+            transformatLight = 0;
+        }else if (transformatLight >= 255){
+            LightnessController.setLightness((VideosDetailsActivity) context, 255);
+            pbLight.setProgress(255);
+            transformatLight = 255;
+        }else {
+            LightnessController.setLightness((VideosDetailsActivity) context, transformatLight);
+            pbLight.setProgress(transformatLight);
+        }
+    }
+
+    public void lightUp(float delatY) {
+        int up = (int) (delatY / height * 255 * 3);
+        int transformatLight = LightnessController.getLightness((VideosDetailsActivity) context) + up;
+        if (transformatLight <= 0) {
+            LightnessController.setLightness((VideosDetailsActivity) context, 0);
+            pbLight.setProgress(0);
+            transformatLight = 0;
+        }else if (transformatLight >= 255){
+            LightnessController.setLightness((VideosDetailsActivity) context, 255);
+            pbLight.setProgress(255);
+            transformatLight = 255;
+        }else {
+            LightnessController.setLightness((VideosDetailsActivity) context, transformatLight);
+            pbLight.setProgress(transformatLight);
+        }
+    }
+}
+
+
+
+===================================================

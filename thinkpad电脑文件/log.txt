@@ -1,0 +1,389 @@
+package cn.com.nggirl.nguser.utils;
+
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.util.HashMap;
+
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.account.AccountManager;
+import cn.com.nggirl.nguser.app.App;
+import cn.com.nggirl.nguser.model.DataManager;
+import cn.com.nggirl.nguser.model.bean.APIResponse;
+import cn.com.nggirl.nguser.model.bean.AddScoreResponse;
+import cn.sharesdk.framework.Platform;
+import cn.sharesdk.framework.PlatformActionListener;
+import cn.sharesdk.framework.ShareSDK;
+import cn.sharesdk.sina.weibo.SinaWeibo;
+import cn.sharesdk.tencent.qq.QQ;
+import cn.sharesdk.tencent.qzone.QZone;
+import cn.sharesdk.wechat.friends.Wechat;
+import cn.sharesdk.wechat.moments.WechatMoments;
+import rx.Subscription;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Action1;
+import rx.functions.Func1;
+
+/**
+ * ShareSdk 分享和第三方登录
+ */
+public class ShareSdkUtils {
+    private static final int SHARE_TYPE_WECHAT_CLASS = 1;
+    private static final int SHARE_TYPE_WECHAT_FRIEND = 2;
+    private static final int SHARE_TYPE_WEIBO = 3;
+    private static final int SHARE_TYPE_QQ = 4;
+    private static final int SHARE_TYPE_QZONE = 5;
+    private Activity context;
+
+    private String shareLink;
+    private String shareTitle;
+    private String shareWechatContent;
+    private String shareSinaContent;
+    private String shareImageLink;
+    private String sharePlatform;
+    private String contentType;
+    private String contentInfo;
+    private String toastStr = "";
+
+    public ShareSdkUtils(Activity context) {
+        this.context = context;
+        ShareSDK.initSDK(context);
+    }
+
+    /**
+     * 需要自己进行组装数据，此方法不处理数据
+     *
+     * @param shareLink
+     * @param shareTitle
+     * @param shareWechatContent
+     * @param shareSinaContent
+     * @param shareImageLink
+     */
+    public void initShareData(String shareLink, String shareTitle, String shareWechatContent, String shareSinaContent, String shareImageLink) {
+        this.shareLink = shareLink;
+        this.shareTitle = shareTitle;
+        this.shareWechatContent = shareWechatContent;
+        this.shareSinaContent = shareSinaContent;
+        this.shareImageLink = shareImageLink;
+    }
+
+    /**
+     * 积分使用
+     *
+     * @param contentType
+     * @param contentInfo
+     */
+    public void initShareType(String contentType, String contentInfo) {
+        this.contentType = contentType;
+        this.contentInfo = contentInfo;
+    }
+
+    /**
+     * 弹出自定义分享布局
+     */
+    public void showShareDialog() {
+        final AlertDialog dialog = new AlertDialog.Builder(context).create();
+        dialog.setCanceledOnTouchOutside(true);
+        Window window = dialog.getWindow();
+        window.setGravity(Gravity.BOTTOM);
+        window.setWindowAnimations(R.style.mydialogstyle);//添加动画
+        dialog.show();
+        window.setContentView(R.layout.dialog_share);
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+
+        window.findViewById(R.id.share_friend).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {//微信好友
+                dialog.dismiss();
+                if (!checkIsWeixinApp()) {
+                    Toast.makeText(App.getInstance(), App.getInstance().getResources().getString(R.string.share_no_wechat_app), Toast.LENGTH_SHORT).show();
+                } else {
+                    shareWechat();
+                }
+            }
+        });
+        window.findViewById(R.id.share_class).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+                if (!checkIsWeixinApp()) {
+                    Toast.makeText(App.getInstance(), App.getInstance().getResources().getString(R.string.share_no_wechat_app), Toast.LENGTH_SHORT).show();
+                } else {
+                    shareWechatConment();
+                }
+            }
+        });
+        window.findViewById(R.id.share_xinlang).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shareSina();
+                dialog.dismiss();
+            }
+        });
+        window.findViewById(R.id.share_qq).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shareQQ();
+                dialog.dismiss();
+            }
+        });
+        window.findViewById(R.id.share_qzone).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+                shareQZone();
+            }
+        });
+        window.findViewById(R.id.share_line).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                copyLink();
+                dialog.dismiss();
+            }
+        });
+        window.findViewById(R.id.tv_share_cancel).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
+            }
+        });
+    }
+
+    /**
+     * 在设置微信和朋友圈分享时要严格按照分享的内容设置
+     * 如果某一个字段为空，则无法调起微信客户端
+     *
+     * 分享文字：shareType(Platform.SHARE_TEXT),title, text
+     * 分享图片：shareType(Platform.SHARE_IMAGE),title, text, imageUrl(网络)(imagePath(本地))
+     * shareType(Platform.SHARE_WEBPAGE),title,text, imageUrl(网络)(imagePath(本地)), url
+     * 分别对应相应的方法进行设置
+     *
+     * 微信分享图片不能超过 32k
+     * imagePath：10M以内
+     */
+    private void shareWechat() {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setTitle(shareTitle);
+        params.setText(shareWechatContent);
+        params.setImageUrl(shareImageLink);
+        params.setUrl(shareLink);
+        params.setShareType(Platform.SHARE_WEBPAGE);
+
+        Platform platform = ShareSDK.getPlatform(Wechat.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(params);
+    }
+
+    /**
+     * 同微信分享
+     */
+    private void shareWechatConment() {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setTitle(shareTitle);
+        params.setText(shareWechatContent);
+        params.setImageUrl(shareImageLink);
+        params.setUrl(shareLink);
+
+        Platform platform = ShareSDK.getPlatform(WechatMoments.NAME);
+        platform.setPlatformActionListener(paListener);
+        params.setShareType(Platform.SHARE_WEBPAGE);
+
+        platform.share(params);
+    }
+
+    /**
+     * 在分享带有链接的内容时，需要将链接放在文本的后面
+     * <p>
+     * 分享文本：text
+     * 分享图文：text, imageUrl(网络)(imagePath(本地))
+     * 微博客户端分享图片不能大于2M
+     */
+    private void shareSina() {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setTitle(shareTitle);
+        params.setText(shareSinaContent + shareLink);
+        params.setImageUrl(shareImageLink);
+
+        Platform platform = ShareSDK.getPlatform(SinaWeibo.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(params);
+    }
+
+    private void shareQQ() {
+        Platform.ShareParams shareParams = new Platform.ShareParams();
+        shareParams.setTitle(shareTitle);
+        shareParams.setTitleUrl(shareLink);
+        shareParams.setText(shareWechatContent);
+        shareParams.setImageUrl(shareImageLink);
+//        shareParams.setImagePath("/storage/emulated/0/DCIM/Camera/IMG_20161108_110536.jpg");
+//        shareParams.setImagePath(fileStr);//可以实现
+
+        Platform platform = ShareSDK.getPlatform(QQ.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(shareParams);
+    }
+
+    private void shareQZone() {
+        Platform.ShareParams shareParams = new Platform.ShareParams();
+        shareParams.setTitle(shareTitle);
+        shareParams.setTitleUrl(shareLink);
+        shareParams.setText(shareWechatContent);
+        shareParams.setImageUrl(shareImageLink);
+        shareParams.setSite("南瓜姑娘");//发布分享的网站名称
+        shareParams.setSiteUrl("https://www.nggirl.com.cn");//发布分享网站的地址
+
+        Platform platform = ShareSDK.getPlatform(QZone.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(shareParams);
+    }
+
+    /**
+     * 复制链接
+     */
+    private void copyLink() {
+        // 从API11开始android推荐使用android.content.ClipboardManager
+        // 为了兼容低版本我们这里使用旧版的android.text.ClipboardManager，虽然提示deprecated，但不影响使用。
+        ClipboardManager cm = (ClipboardManager) App.getInstance().getSystemService(Context.CLIPBOARD_SERVICE);
+        // 将文本内容放到系统剪贴板里。
+        cm.setText(shareLink);
+        Toast.makeText(App.getInstance(), App.getInstance().getResources().getString(R.string.share_to_line_success), Toast.LENGTH_SHORT).show();
+    }
+
+    public void shareWechatOnlyImage(String shareTitle, String shareImageLink) {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setTitle(shareTitle);
+        params.setImageUrl(shareImageLink);
+        params.setShareType(Platform.SHARE_IMAGE);
+
+        Platform platform = ShareSDK.getPlatform(Wechat.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(params);
+    }
+
+    public void shareWechatConmentOnlyImage(String shareTitle, String shareImageLink) {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setTitle(shareTitle);
+        params.setImageUrl(shareImageLink);
+        params.setShareType(Platform.SHARE_IMAGE);
+
+        Platform platform = ShareSDK.getPlatform(WechatMoments.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(params);
+    }
+
+    public void shareSinaOnlyImage(String shareTitle, String shareImageLink) {
+        Platform.ShareParams params = new Platform.ShareParams();
+        params.setText(shareTitle);
+        params.setImageUrl(shareImageLink);
+
+        Platform platform = ShareSDK.getPlatform(SinaWeibo.NAME);
+        platform.setPlatformActionListener(paListener);
+
+        platform.share(params);
+    }
+
+    /**
+     * 分享后的回调
+     *
+     * 在这里用于分享后的加积分操作和基本状态提示
+     */
+    PlatformActionListener paListener = new PlatformActionListener() {
+        @Override
+        public void onComplete(Platform platform, int i, HashMap<String, Object> hashMap) {
+            int checkPlatform = checkPlatform(platform.getName());
+            sharePlatform = checkPlatform + "";
+            Toast.makeText(App.getInstance(), toastStr + App.getInstance().getResources().getString(R.string.share_success), Toast.LENGTH_SHORT).show();
+            getValuesInfo();
+
+        }
+
+        @Override
+        public void onError(Platform platform, int i, Throwable throwable) {
+            checkPlatform(platform.getName());
+            Toast.makeText(App.getInstance(), toastStr + App.getInstance().getResources().getString(R.string.share_failure), Toast.LENGTH_SHORT).show();
+        }
+
+        @Override
+        public void onCancel(Platform platform, int i) {
+            checkPlatform(platform.getName());
+            Toast.makeText(App.getInstance(), toastStr + App.getInstance().getResources().getString(R.string.share_cancel), Toast.LENGTH_SHORT).show();
+        }
+    };
+
+    //==========获取添加积分信息=================
+    private void getValuesInfo() {
+        Subscription subscription = DataManager.getInstance().shareSuccess(AccountManager.instance().getToken(),
+                sharePlatform, contentType, contentInfo)
+                .map(new Func1<APIResponse<AddScoreResponse>, AddScoreResponse>() {
+                    @Override
+                    public AddScoreResponse call(APIResponse<AddScoreResponse> response) {
+                        return response.data;
+                    }
+                })  //转换数据结果
+                .observeOn(AndroidSchedulers.mainThread())  //切换到主线程
+                .subscribe(new Action1<AddScoreResponse>() {
+                    @Override
+                    public void call(AddScoreResponse model) {
+                        final int addScore = model.getAddScore();
+                        if (addScore > 0) {
+                            showImageToast(String.format(App.getInstance().getResources().getString(R.string.user_values_record_add), String.valueOf(addScore)));
+                        }
+                    }
+                }, new Action1<Throwable>() {
+                    @Override
+                    public void call(Throwable throwable) {
+                    }
+                });
+    }
+
+    public void showImageToast(String str) {
+        View layout = View.inflate(App.getInstance(), R.layout.toast_score_reminder, null);
+        TextView title = (TextView) layout.findViewById(R.id.tv_toast_content);
+        title.setText(str);
+        Toast toast = new Toast(App.getInstance());
+        toast.setGravity(Gravity.CENTER, 0, 0);
+        toast.setDuration(Toast.LENGTH_SHORT);
+        toast.setView(layout);
+        toast.show();
+    }
+
+    private int checkPlatform(String platform) {
+        if (platform.equals(SinaWeibo.NAME)) {
+            toastStr = App.getInstance().getResources().getString(R.string.weibo_share);
+            return SHARE_TYPE_WEIBO;
+        } else if (platform.equals(Wechat.NAME)) {
+            toastStr = App.getInstance().getResources().getString(R.string.wechat_share_to_chat);
+            return SHARE_TYPE_WECHAT_CLASS;
+        } else if (platform.equals(WechatMoments.NAME)) {
+            toastStr = App.getInstance().getResources().getString(R.string.wechat_share_to_moments);
+            return SHARE_TYPE_WECHAT_FRIEND;
+        } else if (platform.equals(QQ.NAME)) {
+            toastStr = App.getInstance().getResources().getString(R.string.wechat_share_to_qq);
+            return SHARE_TYPE_QQ;
+        } else {
+            toastStr = App.getInstance().getResources().getString(R.string.wechat_share_to_qzone);
+            return SHARE_TYPE_QZONE;
+        }
+    }
+
+    private boolean checkIsWeixinApp() {
+        Platform weixin = ShareSDK.getPlatform(context, Wechat.NAME);
+        return weixin.isClientValid();
+    }
+
+}

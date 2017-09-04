@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+
+    <cn.com.nggirl.nguser.ui.widget.SimpleUserdefEmoticonsKeyBoard
+        android:id="@+id/ek_bar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/bg_base"
+            android:descendantFocusability="beforeDescendants"
+            android:focusable="true"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <com.dinuscxj.pullzoom.PullZoomRecyclerView
+                        android:id="@+id/recycler_view"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <!--app:layout_behavior="@string/appbar_scrolling_view_behavior"-->
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_titlebar_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <include layout="@layout/include_share_toolbar" />
+
+                    <View
+                        android:id="@+id/titlebar_divier"
+                        style="@style/NormalDivider" />
+                </LinearLayout>
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+    </cn.com.nggirl.nguser.ui.widget.SimpleUserdefEmoticonsKeyBoard>
+
+    <android.support.design.widget.FloatingActionButton
+        android:id="@+id/iv_back_top"
+        android:layout_width="45dp"
+        android:layout_height="45dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginBottom="70dp"
+        android:layout_marginRight="20dp"
+        android:src="@drawable/icon_back_top"
+        app:backgroundTint="@color/theme_orange"
+        app:borderWidth="0dp"
+        app:elevation="0dp"
+        app:fabSize="normal"
+        app:layout_behavior="cn.com.nggirl.nguser.mall.productdetails.behavior.FABBehavior"
+        app:pressedTranslationZ="12dp" />
+
+</android.support.design.widget.CoordinatorLayout>
+
+
+
+
+ArticlesDetailsFragment===========================
+792=========796
+

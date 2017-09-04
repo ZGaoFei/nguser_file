@@ -1,0 +1,57 @@
+⌥ —> option|alt
+⇧ —> shift
+⌃ —> control
+⌘ —> command
+⎋ —> esc
+
+强制退出卡死应用：Command alt esc
+
+常用的 android studio 快捷键（Mac）：
+
+Command c:	复制
+Command v:	粘贴
+Command x:	剪切
+Command z:	撤销
+
+Command d:	复制当前行
+Command delete：	删除当前行
+Command o:	查找工程内的 class
+Command p:	提示方法的参数
+Command alt o:	查找工程内的文件或方法或字段
+Command alt l:	格式化代码
+Command n:	generate method
+Command f:	搜索
+Command r:	替换搜索
+Command ,:	打开设置
+Command ;:	打开 project structure
+Command [:	返回上一次编辑的位置
+Command shift [:返回上一次查看的文件
+Command shift ]:进入下一个文件
+Command alt f:	快速抽取成员变量
+Command /:	注释效果\\……
+Command alt /:	注释效果/*……*/
+Command j:	快速生成代码模块，适用于 if,for,try……catch
+
+control j:	显示该方法或类的API（简介）
+control r:	运行项目
+control p: 	鼠标移动到上一行
+control n:	鼠标移动到下一行
+control alt h:	查看调用的位置
+control h:	查看当前 class 的 hierarchy 结构
+control o:	快速复写方法
+control I:	快速实现接口方法
+control t:	调出 refactor 选项框
+
+alt enter:	导入包，自动修正
+alt 方向键:	选中单词或行
+alt shift up/down:上下移动代码
+alt control o:	清除无效引用
+
+
+Editor —>Code Completion —>Case sensitive completion 调成 none ，使大小写不敏感
+Editor —>Show quick doc on mouse move 打勾，鼠标移动到方法上显示api
+Editor —>Auto Import —>Optimize imports on fly 打勾，把不用的声明移除掉，相当于Ctrl + Alt + O
+
+
+
+

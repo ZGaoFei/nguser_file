@@ -1,0 +1,606 @@
+/**
+     * 根据宽高进行压缩图片
+     *
+     * @param uri
+     * @param draweeView
+     * @param width
+     * @param height
+     */
+    public static void load(Uri uri, SimpleDraweeView draweeView, int width, int height){
+        ImageRequest request =
+                ImageRequestBuilder.newBuilderWithSource(uri)
+                        .setResizeOptions(new ResizeOptions(width,height))
+                        //缩放,在解码前修改内存中的图片大小, 配合Downsampling可以处理所有图片,否则只能处理jpg,
+                        // 开启Downsampling:在初始化时设置.setDownsampleEnabled(true)
+                        .setProgressiveRenderingEnabled(true)//支持图片渐进式加载
+                        .setAutoRotateEnabled(true) //如果图片是侧着,可以自动旋转
+                        .build();
+
+        PipelineDraweeController controller =
+                (PipelineDraweeController) Fresco.newDraweeControllerBuilder()
+                        .setImageRequest(request)
+                        .setOldController(draweeView.getController())
+                        .setAutoPlayAnimations(true) //自动播放gif动画
+                        .build();
+
+        draweeView.setController(controller);
+    }
+
+
+
+tvSure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.e("===11====", "==skuId===" + skuId + "==selectNum==" + selectNum + "===fromWhere==" + fromWhere);
+//                clickSureListener.onClick(skuId, selectNum, fromWhere);// 获取选中的属性
+                dismiss();
+            }
+        });
+        tvAdd.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.e("====22===", "===skuId===" + skuId + "==selectNum==" + selectNum);
+//                backDataListener.backDataListener(skuId, selectNum);// 加入购物车
+            }
+        });
+        tvBuy.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Log.e("===33====", "===skuId===" + skuId + "==selectNum==" + selectNum);
+//                clickBuyListener.onClickBuy(skuId, selectNum);// 购买跳转订单页面
+                dismiss();
+            }
+        });
+
+
+
+===================================================
+
+package cn.com.nggirl.nguser.mall.productdetails;
+
+
+import android.app.AlertDialog;
+import android.content.Context;
+import android.os.Bundle;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import com.facebook.drawee.view.SimpleDraweeView;
+import com.zhy.view.flowlayout.FlowLayout;
+import com.zhy.view.flowlayout.TagAdapter;
+import com.zhy.view.flowlayout.TagFlowLayout;
+
+import java.util.List;
+
+import cn.com.nggirl.commons.FrescoUtils;
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.mall.business.bean.ItemSkuBean;
+import cn.com.nggirl.nguser.mall.business.bean.SkusBean;
+import cn.com.nggirl.nguser.mall.business.bean.SpecsBean;
+import cn.com.nggirl.nguser.utils.PriceSpanUtil;
+
+public class SkuSelectDialog extends AlertDialog {
+    /**
+     * 0:底部显示加入购物车和立即购买按钮
+     * 1-3：底部显示确定按钮
+     */
+    public static final int FROM_PRODUCT_DETAILS = 0;//商品详情页点击属性选择
+    public static final int FROM_SHOPPING_CART = 1;//购物车页面点击编辑属性
+    public static final int FROM_PRODUCT_DETAILS_CART =2;//商品详情页点击加入购物车
+    public static final int FROM_PRODUCT_DETAILS_BUY = 3;//商品详情页点击立即购买
+
+    private static final int LINEARlAYOUT_VISIBLE = 0;
+    private static final int SURE_VISIBLE = 1;
+    private static final int NOTHING_VISIBLE = 2;
+
+    private Context context;
+    private ItemSkuBean itemSkuBean;
+    private int fromWhere;
+    private SkuSelectAdapter adapter;
+
+    private ImageView ivCancel;
+    private TextView tvContent;
+    private SimpleDraweeView simpleDraweeView;
+    private LinearLayout linearLayout;
+    private TextView tvSure;
+    private TextView tvNothing;
+    private TextView tvAdd;
+    private TextView tvBuy;
+    private TextView tvSelected;
+    private TextView tvPrice;
+    private RecyclerView recyclerView;
+    private TextView tvDown;
+    private TextView tvNum;
+    private TextView tvUp;
+
+    private int selectNum = 0;
+    private int skuId;
+    private int stockQuantity;
+    private double skuPrice;
+    private String selectStr;
+    private BackDataListener backDataListener;
+    private ClickSureListener clickSureListener;
+    private ClickBuyListener clickBuyListener;
+    private UpdateSelectedListener updateSelectedListener;
+
+    public SkuSelectDialog(Context context, ItemSkuBean itemSkuBean, int fromWhere) {
+        super(context, R.style.SkuDialog);
+        this.context = context;
+        this.itemSkuBean = itemSkuBean;
+        this.fromWhere = fromWhere;
+    }
+
+    public void updateData(ItemSkuBean itemSkuBean) {
+        this.itemSkuBean = itemSkuBean;
+        initTitle();
+        initData();
+        initBottom();
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.dialog_sku_selecte);
+
+        initView();
+        initTitle();
+        initData();
+        initBottom();
+    }
+
+    @Override
+    public void show() {
+        super.show();
+        WindowManager.LayoutParams layoutParams = getWindow().getAttributes();
+        layoutParams.gravity = Gravity.BOTTOM;
+        layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+        layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+
+        getWindow().getDecorView().setPadding(0, 0, 0, 0);
+
+        getWindow().setAttributes(layoutParams);
+    }
+
+    private void initView() {
+        //top
+        ivCancel = (ImageView) findViewById(R.id.iv_sku_select_cancel);
+        ivCancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dismiss();
+            }
+        });
+        tvPrice = (TextView) findViewById(R.id.tv_sku_select_price);
+        tvContent = (TextView) findViewById(R.id.tv_sku_select_content);
+        tvSelected = (TextView) findViewById(R.id.tv_sku_select);
+        simpleDraweeView = (SimpleDraweeView) findViewById(R.id.iv_sku_select_pic);
+
+        //center
+        recyclerView = (RecyclerView) findViewById(R.id.rv_sku_select);
+
+        //bottom
+        tvNum = (TextView) findViewById(R.id.tv_sku_select_num);
+        tvDown = (TextView) findViewById(R.id.tv_sku_select_down);
+        tvDown.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                selectNum = selectNum - 1;
+                tvNum.setText(String.valueOf(selectNum));
+                if (selectNum <= stockQuantity) {
+                    if (fromWhere == FROM_PRODUCT_DETAILS) {
+                        checkVISIBLE(LINEARlAYOUT_VISIBLE);
+                    } else {
+                        checkVISIBLE(SURE_VISIBLE);
+                    }
+                    tvUp.setEnabled(true);
+
+                    if (selectNum <= 1) {
+                        tvDown.setEnabled(false);
+                        tvDown.setTextColor(context.getResources().getColor(R.color.font_9a));
+                    }
+                    if (selectNum < 99) {
+                        tvUp.setEnabled(true);
+                        tvUp.setTextColor(context.getResources().getColor(R.color.font_ffb270));
+                    }
+                }
+            }
+        });
+        tvUp = (TextView) findViewById(R.id.tv_sku_select_up);
+        tvUp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                selectNum = selectNum + 1;
+                tvNum.setText(String.valueOf(selectNum));
+                if (selectNum > stockQuantity) {
+                    checkVISIBLE(NOTHING_VISIBLE);
+                    tvUp.setEnabled(false);
+                } else {
+                    if (selectNum >= 99) {
+                        tvUp.setEnabled(false);
+                        tvUp.setTextColor(context.getResources().getColor(R.color.font_9a));
+                    }
+                    if (selectNum > 1) {
+                        tvDown.setEnabled(true);
+                        tvDown.setTextColor(context.getResources().getColor(R.color.font_ffb270));
+                    }
+                }
+            }
+        });
+
+        linearLayout = (LinearLayout) findViewById(R.id.ll_sku_select_bottom);
+        tvSure = (TextView) findViewById(R.id.tv_sku_select_sure);
+        tvNothing = (TextView) findViewById(R.id.tv_sku_select_nothing);
+        tvAdd = (TextView) findViewById(R.id.tv_sku_select_add);
+        tvBuy = (TextView) findViewById(R.id.tv_sku_select_buy);
+
+        checkStockQuantity();
+
+        tvSure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                clickSureListener.onClick(skuId, selectNum, fromWhere);// 获取选中的属性
+                clickSureListener.onClick(skuId,selectNum,selectStr,skuPrice);
+                dismiss();
+            }
+        });
+        tvAdd.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                backDataListener.backDataListener(skuId, selectNum);// 加入购物车
+            }
+        });
+        tvBuy.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                clickBuyListener.onClickBuy(skuId, selectNum);// 购买跳转订单页面
+                dismiss();
+            }
+        });
+    }
+
+    private void initTitle() {
+        tvPrice.setText(PriceSpanUtil.getPriceSpan(itemSkuBean.getSalePrice(), PriceSpanUtil.ORANGE, 12));
+
+        tvContent.setText(itemSkuBean.getReamTitle());
+        if (!TextUtils.isEmpty(itemSkuBean.getSelect())) {
+            tvSelected.setText(itemSkuBean.getSelect());
+        }
+        if (!TextUtils.isEmpty(itemSkuBean.getImgUrl())) {
+            FrescoUtils.loadImage(itemSkuBean.getImgUrl(), simpleDraweeView);
+        }
+    }
+
+    private void initData() {
+        recyclerView.setLayoutManager(new LinearLayoutManager(context));
+
+        addSelected();
+        adapter = new SkuSelectAdapter(context, itemSkuBean);
+        recyclerView.setAdapter(adapter);
+
+        adapter.setHasGoodsListener(new HasGoodsListener() {
+            @Override
+            public void hasGoodsListener(String string, String[] select, double skuPrice) {
+                check(string);
+
+                selectStr = select[0];
+                for (int i = 1; i < select.length; i++) {
+                    selectStr = selectStr + " " + select[i];
+                }
+                tvSelected.setText(selectStr);
+                tvPrice.setText(PriceSpanUtil.getPriceSpan(String.valueOf(skuPrice), PriceSpanUtil.ORANGE, 12));
+
+                updateSelectedListener.updateSelected(skuId, selectNum, selectStr, String.valueOf(skuPrice));
+            }
+        });
+    }
+
+    private void initBottom() {
+        selectNum = Integer.parseInt(tvNum.getText().toString());
+    }
+
+    private void check(String string) {
+        List<SkusBean> skus = itemSkuBean.getSkus();
+        for (int i = 0; i < skus.size(); i++) {
+            String specGroup = skus.get(i).getSpecGroup();
+            if (!TextUtils.isEmpty(specGroup)) {
+                if (specGroup.equals(string)) {
+                    if (fromWhere == FROM_PRODUCT_DETAILS) {
+                        checkVISIBLE(LINEARlAYOUT_VISIBLE);
+                    } else {
+                        checkVISIBLE(SURE_VISIBLE);
+                    }
+                    break;
+                } else {
+                    checkVISIBLE(NOTHING_VISIBLE);
+                }
+            }
+        }
+    }
+
+    private void checkStockQuantity() {
+        List<SkusBean> skus = itemSkuBean.getSkus();
+        for (int i = 0; i < skus.size(); i++) {
+            String specGroup = skus.get(i).getSpecGroup();
+            int quantity = skus.get(i).getStockQuantity();
+            if (!TextUtils.isEmpty(specGroup) && quantity > 0) {
+                if (fromWhere == FROM_PRODUCT_DETAILS) {
+                    checkVISIBLE(LINEARlAYOUT_VISIBLE);
+                } else {
+                    checkVISIBLE(SURE_VISIBLE);
+                }
+                break;
+            } else {
+                checkVISIBLE(NOTHING_VISIBLE);
+            }
+        }
+    }
+
+    private void checkVISIBLE(int show) {
+        switch (show) {
+            case LINEARlAYOUT_VISIBLE:
+                linearLayout.setVisibility(View.VISIBLE);
+                tvSure.setVisibility(View.GONE);
+                tvNothing.setVisibility(View.GONE);
+                break;
+            case SURE_VISIBLE:
+                linearLayout.setVisibility(View.GONE);
+                tvSure.setVisibility(View.VISIBLE);
+                tvNothing.setVisibility(View.GONE);
+                break;
+            case NOTHING_VISIBLE:
+                linearLayout.setVisibility(View.GONE);
+                tvSure.setVisibility(View.GONE);
+                tvNothing.setVisibility(View.VISIBLE);
+                break;
+        }
+    }
+
+    private void addSelected() {
+        List<SkusBean> skus = itemSkuBean.getSkus();
+        String[] strings = null;
+
+        for (int i = 0; i < skus.size(); i++) {
+            if (skus.get(i).getStockQuantity() > 0) {
+                skuId = skus.get(i).getSkuId();
+                String specGroup = skus.get(i).getSpecGroup();
+                String[] strings1 = splitString(specGroup);
+
+                if (strings1 != null) {
+                    strings = new String[strings1.length];
+                    for (int j = 0; j < strings1.length; j++) {
+                        strings[j] = strings1[j];
+                    }
+                    break;
+                }
+            }
+        }
+
+        List<SpecsBean> specs = itemSkuBean.getSpecs();
+        for (int i = 0; i < specs.size(); i++) {
+            List<SpecsBean.ValuesBean> values = specs.get(i).getValues();
+            for (int j = 0; j < values.size(); j++) {
+                int valueId = values.get(j).getValueId();
+
+                if (strings != null) {
+                    if (strings[i].equals(String.valueOf(valueId))) {
+                        itemSkuBean.getSpecs().get(i).getValues().get(j).setIsSelected(1);
+                    } else {
+                        itemSkuBean.getSpecs().get(i).getValues().get(j).setIsSelected(0);
+                    }
+                }
+            }
+        }
+    }
+
+    private String[] splitString(String string) {
+        String[] strings = null;
+        if (TextUtils.isEmpty(string)) {
+            return strings;
+        }
+        String[] split = string.split(";");
+        strings = new String[split.length];
+
+        for (int i = 0; i < split.length; i++) {
+            String[] split1 = split[i].split(":");
+            strings[i] = split1[1];
+        }
+
+        return strings;
+    }
+
+    class SkuSelectAdapter extends RecyclerView.Adapter<SkuSelectAdapter.ViewHolder> {
+        private Context context;
+        private List<SpecsBean> beanList;
+        private List<SkusBean> skusBeanList;
+        private String[] specId;
+        private String[] select;
+        private HasGoodsListener listener;
+
+        public SkuSelectAdapter(Context context, ItemSkuBean itemSkuBean) {
+            this.context = context;
+            this.beanList = itemSkuBean.getSpecs();
+            this.skusBeanList = itemSkuBean.getSkus();
+            specId = new String[beanList.size()];
+            select = new String[beanList.size()];
+        }
+
+        @Override
+        public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view = View.inflate(context, R.layout.item_sku_select_center, null);
+
+            return new ViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(ViewHolder holder, final int position) {
+            List<SpecsBean.ValuesBean> values = beanList.get(position).getValues();
+            holder.textView.setText(beanList.get(position).getName());
+
+            holder.flowLayout.setAdapter(new TagAdapter<SpecsBean.ValuesBean>(values) {
+
+                @Override
+                public View getView(FlowLayout parent, final int p, final SpecsBean.ValuesBean itemLabelBean) {
+                    View view = View.inflate(context, R.layout.item_sku_select_flow_layout, null);
+
+                    TextView textView = (TextView) view.findViewById(R.id.tv_dialog_select);
+                    textView.setText(itemLabelBean.getValue());
+
+                    boolean checkId = checkId(beanList.get(position).getSpecId() + ":" + itemLabelBean.getValueId(), position);
+
+                    if (!checkId) {
+                        textView.setTextColor(context.getResources().getColor(R.color.font_9a));
+                        textView.setBackgroundResource(R.drawable.icon_dialog_seclet);
+                        textView.setEnabled(false);
+                    } else if (itemLabelBean.getIsSelected() == 1) {
+                        specId[position] = beanList.get(position).getSpecId() + ":" + itemLabelBean.getValueId();
+                        select[position] = itemLabelBean.getValue();
+                        getSkuId(addString(specId));
+                        listener.hasGoodsListener(addString(specId), select, skuPrice);
+
+                        textView.setTextColor(context.getResources().getColor(R.color.font_white));
+                        textView.setBackgroundResource(R.drawable.icon_dialog_seclet_bg_hl);
+                        textView.setEnabled(true);
+                    } else {
+                        textView.setTextColor(context.getResources().getColor(R.color.font_4c));
+                        textView.setBackgroundResource(R.drawable.icon_dialog_seclet_hl);
+                        textView.setEnabled(true);
+                    }
+
+                    textView.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            List<SpecsBean.ValuesBean> values = beanList.get(position).getValues();
+                            for (int i = 0; i < values.size(); i++) {
+                                if (i == p) {
+                                    values.get(i).setIsSelected(1);
+                                } else {
+                                    values.get(i).setIsSelected(0);
+                                }
+                            }
+                            notifyItemChanged(position);
+                        }
+                    });
+
+                    return view;
+                }
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return beanList.size();
+        }
+
+        class ViewHolder extends RecyclerView.ViewHolder {
+            private TagFlowLayout flowLayout;
+            private TextView textView;
+
+            public ViewHolder(View itemView) {
+                super(itemView);
+                flowLayout = (TagFlowLayout) itemView.findViewById(R.id.flow_sku_select_center);
+                textView = (TextView) itemView.findViewById(R.id.item_sku_select_center_key);
+            }
+        }
+
+        private void setHasGoodsListener(HasGoodsListener listener) {
+            this.listener = listener;
+        }
+
+        private String addString(String[] strings) {
+            String result = strings[0];
+            for (int i = 1; i < strings.length; i++) {
+                result = result + ";" + strings[i];
+            }
+            return result;
+        }
+
+        private boolean checkId(String string, int position) {
+            for (int i = 0; i < skusBeanList.size(); i++) {
+                String specGroup = skusBeanList.get(i).getSpecGroup();
+                int stockQuantity = skusBeanList.get(i).getStockQuantity();
+                if (stockQuantity <= 0) {
+                    return false;
+                } else if (!TextUtils.isEmpty(specGroup)) {
+                    String[] split = specGroup.split(";");
+                    if (position < split.length) {
+                        if (split[position].equals(string)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private void getSkuId(String string) {
+            for (int i = 0; i < skusBeanList.size(); i++) {
+                if (!TextUtils.isEmpty(skusBeanList.get(i).getSpecGroup())) {
+                    if (skusBeanList.get(i).getSpecGroup().equals(string)) {
+                        skuId = skusBeanList.get(i).getSkuId();
+                        skuPrice = skusBeanList.get(i).getSalePrice();
+                        stockQuantity = skusBeanList.get(i).getStockQuantity();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    interface HasGoodsListener{
+        void hasGoodsListener(String string, String[] select, double skuPrice);
+    }
+
+    /**
+     * 点击加入购物车接口
+     */
+    public interface BackDataListener{
+        void backDataListener(int skuId, int num);
+    }
+
+    public void setBackDataListener(BackDataListener backDataListener) {
+        this.backDataListener = backDataListener;
+    }
+
+    /**
+     * 点击确定按钮的接口
+     */
+    public interface ClickSureListener{
+        void onClick(int skuId, int num, int fromWhere);
+        void onClick(int skuId,int num,String skuName,double skuPrice);
+    }
+
+    public void setOnClickSureListener(ClickSureListener clickSureListener) {
+        this.clickSureListener = clickSureListener;
+    }
+
+    /**
+     * 点击购买接口
+     */
+    public interface ClickBuyListener{
+        //返回数据根据实际情况定
+        void onClickBuy(int skuId, int num);
+    }
+
+    public void setOnClickBuyListener(ClickBuyListener clickBuyListener) {
+        this.clickBuyListener = clickBuyListener;
+    }
+
+    /**
+     * 更新商品详情页数据
+     */
+    public interface UpdateSelectedListener{
+        void updateSelected(long skuId, int num, String selected, String skuPrice);
+    }
+
+    public void setUpdateSelectedListener(UpdateSelectedListener listener) {
+        this.updateSelectedListener = listener;
+    }
+}

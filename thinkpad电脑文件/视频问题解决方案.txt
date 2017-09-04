@@ -1,0 +1,2464 @@
+============================================================
+设置全屏
+
+问题：会导致下一级页面布局（输入框）出现问题
+============================================================
+
+private void hideTopNavigation() {
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+    }
+
+
+=============================================================
+
+package cn.com.nggirl.nguser.utils.surfaceviewutils;
+
+import android.content.Context;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.AnimationDrawable;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.os.Handler;
+import android.os.Message;
+import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
+
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import cn.com.nggirl.commons.DensityUtils;
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.ui.activity.articles.VideosDetailsActivity;
+
+public class SurfaceViewUtils {
+    private SurfaceView surfaceView;
+    private SurfaceHolder surfaceHolder;
+    private MediaPlayer mediaPlayer;
+    private String url;
+    private Context context;
+    private SeekBar seekBar;
+    private ImageView ivLoading;
+    private LinearLayout linearLayout;
+    private TextView tvTime;
+    private String allTime;
+    private AnimationDrawable animationDrawable;
+    private Handler handler;
+    // 屏幕宽高
+    private float width;
+    private float height;
+    private float svHeight;
+
+    private boolean seekBarAuto;//判断进度条是否运行
+    private boolean isDestory;//判断surfaceview是否destroy
+    private boolean isAll;//是否播放完视频
+    private boolean isRun = true;//视频是否在播放状态
+    private boolean isPause;//是否进入下一个页面或者点击home键（是否执行onPause()方法）
+    private boolean isPrepared;//视频是否加载完
+
+    private AudioManager mAudioManager;
+    private TextView tvSpeed;
+    private ImageView ivSpeed;
+    private SurfaceViewProgressBar pbVolume;
+    private SurfaceViewProgressBar pbLight;
+
+    private int currentPosition = -1;
+
+    public SurfaceViewUtils(String url, Context context, Handler handler) {
+        this.url = url;
+        this.context = context;
+        this.handler = handler;
+    }
+
+    public void setLayout(SurfaceView surfaceView, SeekBar seekBar, ImageView ivLoading, LinearLayout linearLayout, TextView textView) {
+        this.surfaceView = surfaceView;
+        this.seekBar = seekBar;
+        this.ivLoading = ivLoading;
+        this.linearLayout = linearLayout;
+        this.tvTime = textView;
+        svHeight = surfaceView.getHeight();
+
+        startAnimation();
+        init();
+        playVideo();
+    }
+
+    public void setTouchView(TextView tvSpeed, ImageView ivSpeed, SurfaceViewProgressBar pbVolume, SurfaceViewProgressBar pbLight) {
+        this.tvSpeed = tvSpeed;
+        this.ivSpeed = ivSpeed;
+        this.pbVolume = pbVolume;
+        this.pbLight = pbLight;
+    }
+
+    private void init(){
+        surfaceHolder = surfaceView.getHolder();
+        surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
+        surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        surfaceHolder.addCallback(new Callback());
+
+        surfaceHolder.setKeepScreenOn(true);
+
+        seekBar.setOnSeekBarChangeListener(new SeekBarChangeListener());
+
+        width = DensityUtils.getWidthInPx(context);
+        height = DensityUtils.getHeightInPx(context);
+
+        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    private void startAnimation() {
+        linearLayout.setVisibility(View.VISIBLE);
+        ivLoading.setVisibility(View.VISIBLE);
+        ivLoading.setImageResource(R.drawable.video_loading);
+        animationDrawable = ((AnimationDrawable)ivLoading.getDrawable());
+        animationDrawable.start();
+    }
+
+    private void playVideo() {
+        mediaPlayer = new MediaPlayer();
+        mediaPlayer.reset();
+        mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        mediaPlayer.setScreenOnWhilePlaying(true);
+        mediaPlayer.setDisplay(surfaceHolder);
+
+        mediaPlayer.setOnCompletionListener(new OnCompletionListener());
+        mediaPlayer.setOnPreparedListener(new OnPreparedListener());
+        mediaPlayer.setOnErrorListener(new OnErrorListener());
+        mediaPlayer.setOnBufferingUpdateListener(new OnBufferingUpdateListener());
+
+        try {
+            mediaPlayer.setDataSource(url);
+            mediaPlayer.prepareAsync();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void play(){
+        mediaPlayer.start();
+        isRun = true;
+        if (isAll) {
+            seekBarAuto = true;
+            new Thread(runnable).start();
+        }
+    }
+
+    public void stop(){
+        mediaPlayer.stop();
+    }
+
+    public void pause() {
+        if (mediaPlayer.isPlaying()) {
+            isRun = false;
+            mediaPlayer.pause();
+        }
+    }
+
+    private void clear() {
+        seekBarAuto = false;
+        seekBar.clearFocus();
+
+        mediaPlayer = null;
+
+        surfaceHolder = null;
+
+        mAudioManager = null;
+
+        animationDrawable.stop();
+        animationDrawable = null;
+    }
+
+    //SurfaceHolder的监听
+    private class Callback implements SurfaceHolder.Callback {
+
+        @Override
+        public void surfaceCreated(SurfaceHolder surfaceHolder) {
+            final Surface surface = surfaceHolder.getSurface();
+
+            if ( surface == null ) return;
+            /* is before 4.0 */
+            final boolean invalidSurfaceAccepted = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH;
+            final boolean invalidSurface = ! surface.isValid();
+
+            if ( invalidSurface && ( ! invalidSurfaceAccepted ) ) return;
+
+            isDestory = false;
+
+            isPrepared = false;
+            setMessage(7);
+            setMessage(8);
+            startAnimation();
+            playVideo();
+
+        }
+
+        @Override
+        public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+        }
+
+        @Override
+        public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
+            isDestory = true;
+
+            surfaceView.clearFocus();
+            mediaPlayer.release();
+        }
+    }
+
+    /**
+     * 设置播放完成监听
+     */
+    private class OnCompletionListener implements MediaPlayer.OnCompletionListener {
+
+        @Override
+        public void onCompletion(MediaPlayer mediaPlayer) {
+            seekBarAuto = false;
+            setMessage(3);
+
+            mediaPlayer.seekTo(0);
+            seekBar.setProgress(0);
+            isAll = true;
+            isRun = false;
+
+        }
+    }
+
+    /**
+     * 设置媒体加载完成以后回调函数
+     */
+    private class OnPreparedListener implements MediaPlayer.OnPreparedListener {
+
+        @Override
+        public void onPrepared(MediaPlayer mediaPlayer) {
+            isPrepared = true;
+
+            seekBarAuto = true;
+            seekBar.setMax(mediaPlayer.getDuration());
+            allTime = formatTime(mediaPlayer.getDuration());
+            tvTime.setText("00:00/" + allTime);
+            new Thread(runnable).start();
+            mediaPlayer.start();
+
+            if (currentPosition > 0) {
+                mediaPlayer.seekTo(currentPosition);
+                currentPosition = -1;
+            }
+
+            setMessage(5);
+        }
+    }
+
+    /**
+     * 滑动条变化线程
+     */
+    private Runnable runnable = new Runnable() {
+
+        public void run() {
+            try {
+                while (seekBarAuto) {
+                    if (!isDestory) {
+                        if (null != mediaPlayer && mediaPlayer.isPlaying()) {
+                            final int currentPosition = mediaPlayer.getCurrentPosition();
+                            seekBar.setProgress(currentPosition);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    };
+
+    /**
+     * 错误监听回调函数
+     */
+    private class OnErrorListener implements MediaPlayer.OnErrorListener {
+
+        @Override
+        public boolean onError(MediaPlayer mediaPlayer, int i, int i1) {
+            setMessage(4);
+            mediaPlayer.stop();
+            linearLayout.setVisibility(View.VISIBLE);
+            surfaceView.clearFocus();
+            mediaPlayer.release();
+            animationDrawable.stop();
+            ivLoading.setVisibility(View.GONE);
+            return false;
+        }
+    }
+
+    /**
+     * 设置缓存变化监听
+     */
+    private class OnBufferingUpdateListener implements MediaPlayer.OnBufferingUpdateListener {
+
+        @Override
+        public void onBufferingUpdate(MediaPlayer mediaPlayer, int i) {
+        }
+    }
+
+    /**
+     * 监听进度条变化
+     */
+    private class SeekBarChangeListener implements SeekBar.OnSeekBarChangeListener{
+        @Override
+        public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+            if (progress >= 0) {
+                if (fromUser) {
+                    mediaPlayer.seekTo(progress);
+
+                    if (!mediaPlayer.isPlaying()) {
+                        setMessage(2);
+                        mediaPlayer.start();
+                    }
+                }
+            }
+
+            if (!isDestory) {
+                tvTime.setText(formatTime(mediaPlayer.getCurrentPosition()) + "/" + allTime);
+            }
+        }
+
+        @Override
+        public void onStartTrackingTouch(SeekBar seekBar) {
+        }
+
+        @Override
+        public void onStopTrackingTouch(SeekBar seekBar) {
+        }
+    }
+
+    public void onPause(){
+        try {
+            if (null != mediaPlayer) {
+                seekBarAuto = false;
+                isPause = true;
+                currentPosition = mediaPlayer.getCurrentPosition();
+                mediaPlayer.pause();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void onResume() {
+        seekBarAuto = true;
+        isPause = false;
+        if (!isDestory) {
+            if (mediaPlayer != null) {
+                if (isRun && !isDestory && isPrepared) {
+                    mediaPlayer.start();
+                    new Thread(runnable).start();
+                }
+
+                if (isRun) {
+                    setMessage(2);
+                } else {
+                    setMessage(3);
+                }
+            } else {
+                playVideo();
+            }
+        }
+    }
+
+    public void onDestroy(){
+        try {
+            if (null != mediaPlayer) {
+                clear();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            // TODO IllegalStateException in MediaPlayer.isplaying() method
+            // http://stackoverflow.com/q/19357036/3962551
+        }
+    }
+
+    // 格式化时间
+    private String formatTime(long time) {
+        DateFormat formatter = new SimpleDateFormat("mm:ss");
+        return formatter.format(new Date(time));
+    }
+
+    // 设置横屏显示的宽和高
+    public void setScreenone(){
+        ViewGroup.LayoutParams lp = surfaceView.getLayoutParams();
+        lp.height = (int) DensityUtils.getWidthInPx(context);
+        lp.width = (int) DensityUtils.getHeightInPx(context);
+
+        surfaceView.setLayoutParams(lp);
+    }
+
+    // 设置竖屏显示的宽和高
+    public void setScreenTwo(){
+        ViewGroup.LayoutParams lp = surfaceView.getLayoutParams();
+        int h = (int) DensityUtils.getHeightInPx(context);
+        lp.height = (int) svHeight;
+        lp.width = h;
+
+        surfaceView.setLayoutParams(lp);
+    }
+
+    private void setMessage(int i) {
+        Message message = Message.obtain();
+        message.what = i;
+        handler.sendMessage(message);
+    }
+
+    /**
+     * 增加手势控制音量，亮度，进度
+     */
+    public void backward(float delataX) {
+        ivSpeed.setImageResource(R.drawable.icon_video_view_back);
+
+        int current = mediaPlayer.getCurrentPosition();
+        int backwardTime = (int) (delataX / width * mediaPlayer.getDuration());
+        int currentTime = current - backwardTime;
+        mediaPlayer.seekTo(currentTime);
+        seekBar.setProgress(currentTime * 100 / mediaPlayer.getDuration());
+        tvSpeed.setText(formatTime(currentTime) + "/" + allTime);
+    }
+
+    public void forward(float delataX) {
+        ivSpeed.setImageResource(R.drawable.icon_video_view_faward);
+
+        int current = mediaPlayer.getCurrentPosition();
+        int forwardTime = (int) (delataX / width * mediaPlayer.getDuration());
+        int currentTime = current + forwardTime;
+        if (currentTime >= mediaPlayer.getDuration()) {
+            mediaPlayer.seekTo(0);
+            seekBar.setProgress(0);
+            mediaPlayer.pause();
+            setMessage(3);
+        } else {
+            mediaPlayer.seekTo(currentTime);
+            seekBar.setProgress(currentTime);
+            tvSpeed.setText(formatTime(currentTime) + "/" + allTime);
+        }
+    }
+
+    public void volumeDown(float delatY) {
+        int max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int down = (int) (delatY / height * max * 3);
+        int volume = Math.max(current - down, 0);
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
+        int transformatVolume = volume * 100 / max;
+        pbVolume.setProgress(transformatVolume);
+    }
+
+    public void volumeUp(float delatY) {
+        int max = mAudioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = mAudioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int up = (int) ((delatY / height) * max * 3);
+        int volume = Math.min(current + up, max);
+        mAudioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0);
+        int transformatVolume = volume * 100 / max;
+        pbVolume.setProgress(transformatVolume);
+    }
+
+    public void lightDown(float delatY) {
+        int down = (int) (delatY / height * 255 * 3);
+        int transformatLight = LightnessController.getLightness((VideosDetailsActivity) context) - down;
+        if (transformatLight <= 0) {
+            LightnessController.setLightness((VideosDetailsActivity) context, 0);
+            pbLight.setProgress(0);
+            transformatLight = 0;
+        }else if (transformatLight >= 255){
+            LightnessController.setLightness((VideosDetailsActivity) context, 255);
+            pbLight.setProgress(255);
+            transformatLight = 255;
+        }else {
+            LightnessController.setLightness((VideosDetailsActivity) context, transformatLight);
+            pbLight.setProgress(transformatLight);
+        }
+    }
+
+    public void lightUp(float delatY) {
+        int up = (int) (delatY / height * 255 * 3);
+        int transformatLight = LightnessController.getLightness((VideosDetailsActivity) context) + up;
+        if (transformatLight <= 0) {
+            LightnessController.setLightness((VideosDetailsActivity) context, 0);
+            pbLight.setProgress(0);
+            transformatLight = 0;
+        }else if (transformatLight >= 255){
+            LightnessController.setLightness((VideosDetailsActivity) context, 255);
+            pbLight.setProgress(255);
+            transformatLight = 255;
+        }else {
+            LightnessController.setLightness((VideosDetailsActivity) context, transformatLight);
+            pbLight.setProgress(transformatLight);
+        }
+    }
+}
+
+
+
+===================================================
+
+package cn.com.nggirl.nguser.ui.fragment;
+
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.BatteryManager;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.support.annotation.Nullable;
+import android.support.design.widget.FloatingActionButton;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.RelativeLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
+
+import com.handmark.pulltorefresh.library.PullToRefreshBase;
+import com.handmark.pulltorefresh.library.PullToRefreshListView;
+import com.nostra13.universalimageloader.core.ImageLoader;
+import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
+import com.umeng.analytics.MobclickAgent;
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import cn.com.nggirl.commons.DensityUtils;
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.app.constants.BeautyConstants;
+import cn.com.nggirl.nguser.app.constants.Constants;
+import cn.com.nggirl.nguser.data.NGEmpty;
+import cn.com.nggirl.nguser.data.NGItem;
+import cn.com.nggirl.nguser.data.NGVideosDetails;
+import cn.com.nggirl.nguser.data.NGVideosDetailsLike;
+import cn.com.nggirl.nguser.data.NGVideosDetailsSeed;
+import cn.com.nggirl.nguser.gson.model.ArticlesOrVideosCommentListModel;
+import cn.com.nggirl.nguser.gson.model.ArticlesOrVideosSubmitCommendModel;
+import cn.com.nggirl.nguser.gson.model.ArticlesOrVideosSubmitReplyModel;
+import cn.com.nggirl.nguser.gson.model.ErrorMessageModel;
+import cn.com.nggirl.nguser.gson.model.NGComments;
+import cn.com.nggirl.nguser.gson.model.ScoreReminderModel;
+import cn.com.nggirl.nguser.gson.model.VideosPostDetailsModel;
+import cn.com.nggirl.nguser.model.net.APIKey;
+import cn.com.nggirl.nguser.model.net.ApiException;
+import cn.com.nggirl.nguser.presenter.contract.PostDetailsContract;
+import cn.com.nggirl.nguser.ui.activity.RelatedProductsActivity;
+import cn.com.nggirl.nguser.ui.activity.TaobaoProductDetailsActivity;
+import cn.com.nggirl.nguser.ui.activity.UserProfileActivity;
+import cn.com.nggirl.nguser.ui.activity.articles.CommentListArticlesOrVideosActivity;
+import cn.com.nggirl.nguser.ui.activity.articles.CommentLoverActivity;
+import cn.com.nggirl.nguser.ui.activity.articles.SeedProductDetailsActivity;
+import cn.com.nggirl.nguser.ui.activity.articles.VideosDetailsActivity;
+import cn.com.nggirl.nguser.ui.activity.articles.VideosDetailsAdapter;
+import cn.com.nggirl.nguser.ui.dialog.CustomDialog;
+import cn.com.nggirl.nguser.ui.widget.AbsListViewScrollDetector;
+import cn.com.nggirl.nguser.ui.widget.SimpleUserdefEmoticonsKeyBoard;
+import cn.com.nggirl.nguser.ui.widget.emoji.EmojiFilter;
+import cn.com.nggirl.nguser.ui.widget.goodview.GoodView;
+import cn.com.nggirl.nguser.ui.widget.goodview.LikeView;
+import cn.com.nggirl.nguser.utils.ParseDataUtils;
+import cn.com.nggirl.nguser.utils.SettingUtils;
+import cn.com.nggirl.nguser.utils.SmileUtils;
+import cn.com.nggirl.nguser.utils.Utils;
+import cn.com.nggirl.nguser.utils.surfaceviewutils.ScreenSwitchUtils;
+import cn.com.nggirl.nguser.utils.surfaceviewutils.SurfaceViewProgressBar;
+import cn.com.nggirl.nguser.utils.surfaceviewutils.SurfaceViewUtils;
+import sj.keyboard.adpater.EmoticonsAdapter;
+import sj.keyboard.adpater.PageSetAdapter;
+import sj.keyboard.data.EmoticonEntity;
+import sj.keyboard.data.EmoticonPageEntity;
+import sj.keyboard.data.EmoticonPageSetEntity;
+import sj.keyboard.interfaces.EmoticonClickListener;
+import sj.keyboard.interfaces.EmoticonDisplayListener;
+import sj.keyboard.interfaces.PageViewInstantiateListener;
+import sj.keyboard.utils.imageloader.ImageBase;
+import sj.keyboard.widget.EmoticonPageView;
+import sj.keyboard.widget.EmoticonsEditText;
+import sj.keyboard.widget.FuncLayout;
+import sj.keyboard.widget.SoftKeyboardSizeWatchLayout;
+
+import static android.app.Activity.RESULT_OK;
+import static android.content.Context.LAYOUT_INFLATER_SERVICE;
+import static cn.com.nggirl.nguser.R.style.dialog;
+
+
+public class VideoDetailsFragment extends BaseFragment implements PostDetailsContract.View {
+    private static final String PATH = "path";
+    private final int SUBMIT_TYPE_COMMENT = 0;
+    private final int SUBMIT_TYPE_REPLY = 1;
+    public final static int CLICK_DELETE_COMMENT = 0;
+    public final static int CLICK_DELETE_REPLY = 1;
+    public final static int VIDEOS_DETAILS_REQUEST = 1;
+    public final static int SEED_PRODUCT_DETAILS_REQUEST = 2;
+    public final static int RELATED_PRODUCT_DETAILS_REQUEST = 3;
+
+    private ImageLoader imageLoader;
+    private View rootView;
+    private PullToRefreshListView listView;
+    private VideosPostDetailsModel detailModel;
+    private List<NGItem> data = new ArrayList<>();
+    private VideosDetailsAdapter adapter;
+    private SimpleUserdefEmoticonsKeyBoard ekBar;
+    private EmoticonsEditText etComment;
+    private TextView btnSend;
+    private ImageView ivBackUp, ivMore, ivShare;
+    private PopupWindow pop;
+    private TextView tvReport, tvReply, tvDelete, tvCancel;
+    private View reportLine, replyLine, deleteLine;
+    private FrameLayout playerBackground;
+    private LinearLayout llVideosDetails;
+    private LinearLayout llInput, llButton;
+    private RelativeLayout rlComment, rlCollect, rlLike, rlCheck;
+    private ImageView ivCollect, ivLike;
+    private FloatingActionButton ivBackTop;
+    private Dialog noTalkDialog;
+    private View footer;
+
+    private long postId, postType;
+    private String commentId, replyId, replyType, reportType;
+    private int submit_type;
+    private int position, replyIndex;
+    private int clickType;
+    private String mVideoPath;
+    private boolean emojPanelShown;
+    private String nickName;
+    private boolean isAddEmptyView;
+    private String queryTime;
+    private String title, type;
+    private int collectStatus, likeStatus;
+    private boolean isLoadDetails;
+    private int positionSeed;
+    private int commentCount;
+    private int praisePosition, praiseStatus;
+
+    //新增视频内容
+    private SurfaceView surfaceView;
+    private SeekBar seekBar;
+    private ImageView ivSurfaceView;
+    private SurfaceViewUtils mSurfaceViewUtils;
+    private ImageView ivLoading;
+    private LinearLayout llVideoLoading;
+    private ImageView ivVideoRun;
+    private TextView tvTime;
+    private ImageView ivScreen;
+    private boolean isRun = true;
+    private boolean isShow;
+
+    //全屏时的标题栏
+    private RelativeLayout rlTop;
+    private RelativeLayout rlBottom;
+    private ImageView ivTopBack;
+    private TextView tvTitle;
+    private ImageView ivBattery;
+    private ImageView ivWifi;
+    private TextView tvTopTime;
+    private ImageView ivLock;
+    private boolean isLock;
+    private Timer timer;
+    private LinearLayout llNoWifi;
+    private TextView tvContinueLook;
+    //视频发生错误
+    private LinearLayout llVideoError;
+    private TextView tvUpdateVideo;
+    //重力调节
+    private ScreenSwitchUtils screenSwitchUtils;
+    private static final int NETWORK_STATE_WIFI = 0;
+    private static final int NETWORK_STATE_MOBILE_DATA_PLAN = 1;
+    private static final int NETWORK_STATE_DOWN = 2;
+    private static final int OPERATION_SYSTEM_TIME = 1;
+    private static final int OPERATION_VIDEO_RUN = 2;
+    private static final int OPERATION_VIDEO_STOP = 3;
+    private static final int OPERATION_VIDEO_ERROR = 4;
+    private static final int OPERATION_VIDEO_LOADING = 5;
+    private static final int OPERATION_VIDEO_LOAD = 6;
+    private static final int OPERATION_VIDEO_GONE_ERROR_VIEW = 7;
+    private static final int OPERATION_VIDEO_LOCK_SCREEN = 8;
+
+    // 全屏播放
+    private LinearLayout llFullScreen;
+    private int isLoader = 0;
+
+    //添加手势控制音量、亮度、进度
+    private RelativeLayout rlSpeed;
+    private TextView tvSpeed;
+    private ImageView ivSpeed;
+    private LinearLayout llVolumePb;
+    private SurfaceViewProgressBar pbVolume;
+    private LinearLayout llLightPb;
+    private SurfaceViewProgressBar pbLight;
+
+    private float mLastMotionX;
+    private float mLastMotionY;
+    private int startX;
+    private int startY;
+    private int threshold;
+    private boolean isClick = true;
+    private float width;
+
+    private GoodView goodView;
+    private LikeView likeView;
+    private int positionBeauty;
+
+    private VideosDetailsActivity mActivity;
+    private AlertDialog alertDialog;
+    private PostDetailsContract.Presenter mPostDetailsPresenter;
+
+    private int isCountViewNum = 1;
+
+    private long lookNum;
+    private long commentNum;
+    private int loves;
+
+    public static VideoDetailsFragment newInstance(long postId, long postType) {
+        Bundle bundle = new Bundle();
+        bundle.putLong(Constants.EXTRA_POST_ID, postId);
+        bundle.putLong(Constants.EXTRA_POST_TYPE, postType);
+        VideoDetailsFragment fragment = new VideoDetailsFragment();
+        fragment.setArguments(bundle);
+        return fragment;
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        rootView = inflater.inflate(R.layout.fragment_video_details, container, false);
+        initView(rootView);
+        initListView();
+        initEmojKeyboard(rootView);
+
+        return rootView;
+    }
+
+    @Override
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        initData();
+        initPop();
+        registerReceiver();
+        isDisplayCommentRules();
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        mActivity = (VideosDetailsActivity) getActivity();
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        mActivity = null;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (SettingUtils.instance().getChatRecord() != null && !SettingUtils.instance().getChatRecord().isEmpty()) {
+            etComment.setText(SettingUtils.instance().getChatRecord());
+        }
+        if (mSurfaceViewUtils != null) {
+            mSurfaceViewUtils.onResume();
+        }
+        hideKeyboard();
+        if (!TextUtils.isEmpty(token)) etComment.setInputType(InputType.TYPE_CLASS_TEXT);
+
+        isLoadDetails = false;
+        loadDetails(isCountViewNum);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (mSurfaceViewUtils != null) {
+            mSurfaceViewUtils.onPause();
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mSurfaceViewUtils != null) {
+            mSurfaceViewUtils.onDestroy();
+            mSurfaceViewUtils = null;
+        }
+
+        if (screenSwitchUtils != null) {
+            screenSwitchUtils.gc();
+            screenSwitchUtils = null;
+        }
+
+        timer.cancel();
+        mActivity.unregisterReceiver(mBatInfoReveiver);
+    }
+
+    private void isDisplayCommentRules() {
+        if (!SettingUtils.getInstance(mActivity).getIsPostRulesDisplay()) {
+            showCommentRules();
+        }
+    }
+
+    /**
+     * 弹出软键盘
+     */
+    private void showKeyboard() {
+        llButton.setVisibility(View.GONE);
+        llInput.setVisibility(View.VISIBLE);
+        ekBar.showText();
+    }
+
+    /**
+     * 隐藏软键盘
+     */
+    public void hideKeyboard() {
+        ekBar.onBackKeyClick();
+    }
+
+    private void initView(View view) {
+        // 新增视频内容
+        surfaceView = (SurfaceView) view.findViewById(R.id.sv_videos_details);
+        seekBar = (SeekBar) view.findViewById(R.id.seek_bar_videos_details);
+        ivSurfaceView = (ImageView) view.findViewById(R.id.iv_surface_view);
+        ivLoading = (ImageView) view.findViewById(R.id.iv_surface_view_loading);
+        llVideoLoading = (LinearLayout) view.findViewById(R.id.ll_video_loading);
+        tvTime = (TextView) view.findViewById(R.id.tv_video_time);
+        ivVideoRun = (ImageView) view.findViewById(R.id.iv_video_run);
+        ivVideoRun.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (isRun) {
+                    isRun = false;
+                    mSurfaceViewUtils.pause();
+                    ivVideoRun.setImageResource(R.drawable.icon_video_start);
+                } else {
+                    isRun = true;
+                    mSurfaceViewUtils.play();
+                    ivVideoRun.setImageResource(R.drawable.icon_video_stop);
+                }
+            }
+        });
+        llFullScreen = (LinearLayout) view.findViewById(R.id.ll_full_screen);
+        ivScreen = (ImageView) view.findViewById(R.id.iv_video_screen);
+        ivScreen.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchPortraitLandscape();
+            }
+        });
+
+        // 横屏时的标题栏
+        rlTop = (RelativeLayout) view.findViewById(R.id.rl_video_view_top);
+        rlBottom = (RelativeLayout) view.findViewById(R.id.rl_video_view_bottom);
+        ivTopBack = (ImageView) view.findViewById(R.id.iv_video_view_back);
+        ivTopBack.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switchPortraitLandscape();
+            }
+        });
+        tvTitle = (TextView) view.findViewById(R.id.tv_video_view_title);
+        ivBattery = (ImageView) view.findViewById(R.id.iv_video_view_battery);
+        ivWifi = (ImageView) view.findViewById(R.id.iv_video_view_wifi);
+        tvTopTime = (TextView) view.findViewById(R.id.tv_video_view_time);
+        tvTopTime.setText(getCurrentTime());
+        ivLock = (ImageView) view.findViewById(R.id.iv_video_view_lock);
+        ivLock.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ivLock.setImageResource(isLock ? R.drawable.icon_video_view_unlock : R.drawable.icon_video_view_locked);
+                ivScreen.setClickable(isLock);
+                isLock = !isLock;
+            }
+        });
+
+        llNoWifi = (LinearLayout) view.findViewById(R.id.ll_no_wifi_state);
+        tvContinueLook = (TextView) view.findViewById(R.id.tv_continue_look);
+        tvContinueLook.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                initSurfaceView();
+
+                llNoWifi.setVisibility(View.GONE);
+                ivWifi.setImageResource(R.drawable.icon_video_view_no_wifi);
+            }
+        });
+        // 视频发生错误
+        llVideoError = (LinearLayout) view.findViewById(R.id.ll_video_error_content);
+        tvUpdateVideo = (TextView) view.findViewById(R.id.tv_update_video);
+        tvUpdateVideo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                llVideoError.setVisibility(View.GONE);
+
+                if (Utils.isWifi()) {
+                    initSurfaceView();
+                    ivWifi.setImageResource(R.drawable.icon_video_view_wifi);
+                } else {
+                    llNoWifi.setVisibility(View.VISIBLE);
+                }
+            }
+        });
+
+        rlSpeed = (RelativeLayout) view.findViewById(R.id.rl_video_view_speed);
+        tvSpeed = (TextView) view.findViewById(R.id.tv_video_view_speed);
+        ivSpeed = (ImageView) view.findViewById(R.id.iv_video_view_speed);
+
+        llVolumePb = (LinearLayout) view.findViewById(R.id.ll_volume_progress_bar);
+        pbVolume = (SurfaceViewProgressBar) view.findViewById(R.id.volume_progress_bar);
+        llLightPb = (LinearLayout) view.findViewById(R.id.ll_light_progress_bar);
+        pbLight = (SurfaceViewProgressBar) view.findViewById(R.id.light_progress_bar);
+
+        listView = (PullToRefreshListView) view.findViewById(R.id.lv_main);
+        listView.setMode(PullToRefreshBase.Mode.DISABLED);
+        listView.getRefreshableView().setOverScrollMode(View.OVER_SCROLL_NEVER);
+        listView.getRefreshableView().setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                hideEmojPanel();
+                hideKeyboard();
+                if (TextUtils.isEmpty(etComment.getText().toString().trim())) {
+                    etComment.setHint(getResources().getString(R.string.comment_input));
+                }
+                return false;
+            }
+        });
+        AbsListViewScrollDetector absListViewScrollDetector = new AbsListViewScrollDetector() {
+            @Override
+            public void onScrollUp() {
+                ivBackTop.setVisibility(View.GONE);
+            }
+
+            @Override
+            public void onScrollDown() {
+                ivBackTop.setVisibility(View.VISIBLE);
+            }
+        };
+        absListViewScrollDetector.setListView(listView.getRefreshableView());
+        listView.setOnScrollListener(absListViewScrollDetector);
+
+        playerBackground = (FrameLayout) view.findViewById(R.id.fl_video_box);
+        playerBackground.setBackgroundResource(R.color.transparent);
+        playerBackground.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                hideEmojPanel();
+                hideKeyboard();
+                return false;
+            }
+        });
+        playerBackground.setOnTouchListener(onTouchListener);
+
+        llVideosDetails = (LinearLayout) view.findViewById(R.id.ll_videos_details_box);
+        llInput = (LinearLayout) view.findViewById(R.id.ll_comment_input_box_articles);
+        llInput.setVisibility(View.GONE);
+        llButton = (LinearLayout) view.findViewById(R.id.ll_comment_button_box_articles);
+        llButton.setVisibility(View.VISIBLE);
+        rlComment = (RelativeLayout) view.findViewById(R.id.rl_articles_details_comment);
+        rlComment.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mActivity.isTokenEmpty()) return;
+                if (isNoTalk(String.format(getResources().getString(R.string.disable_text), detailModel.getData().getNoTalkTime())))
+                    return;
+                viewAllComment();
+            }
+        });
+        rlCollect = (RelativeLayout) view.findViewById(R.id.rl_articles_details_collection);
+        rlCollect.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                collect();
+            }
+        });
+        rlLike = (RelativeLayout) view.findViewById(R.id.rl_articles_details_like);
+        rlLike.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                like();
+            }
+        });
+        rlCheck = (RelativeLayout) view.findViewById(R.id.rl_articles_details_check_product);
+        rlCheck.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                umengStatisticRelatedProducts();
+                startRelatedProductActivity(postId, postType);
+            }
+        });
+        ivCollect = (ImageView) view.findViewById(R.id.iv_articles_details_collection);
+        ivLike = (ImageView) view.findViewById(R.id.iv_articles_details_like);
+        ivBackUp = (ImageView) view.findViewById(R.id.left);
+        ivBackUp.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                returnUpdateStatus();
+                mActivity.finish();
+            }
+        });
+        ivShare = (ImageView) view.findViewById(R.id.right);
+        ivShare.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                share();
+            }
+        });
+
+        ivMore = (ImageView) view.findViewById(R.id.more);
+        ivMore.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showMoreDialog((int) postId);
+            }
+        });
+
+        ivBackTop = (FloatingActionButton) view.findViewById(R.id.iv_back_top);
+        ivBackTop.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listView.getRefreshableView().setSelection(0);
+            }
+        });
+    }
+
+    private void initPop() {
+        LayoutInflater layoutInflater = (LayoutInflater) mActivity.getSystemService(LAYOUT_INFLATER_SERVICE);
+        pop = new PopupWindow(mActivity);
+        pop.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        View view = layoutInflater.inflate(R.layout.comment_delete_popupwindows, null);
+        pop.setWidth(ViewGroup.LayoutParams.MATCH_PARENT);
+        pop.setHeight(ViewGroup.LayoutParams.MATCH_PARENT);
+        pop.setBackgroundDrawable(new BitmapDrawable());
+        pop.setContentView(view);
+        tvReport = (TextView) view.findViewById(R.id.tv_comment_report);
+        tvReport.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                CustomDialog dialog = new CustomDialog(mActivity, R.style.mystyle, R.layout.customdialog,
+                        mActivity.getResources().getString(R.string.hint_text), mActivity.getResources().getString(R.string.hint_report_content));
+                dialog.setOnButtonSureClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        report();
+                    }
+                });
+                dialog.show();
+                pop.dismiss();
+            }
+        });
+        tvDelete = (TextView) view.findViewById(R.id.tv_comment_delete);
+        tvDelete.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switch (clickType) {
+                    case CLICK_DELETE_COMMENT:
+                        CustomDialog dialog = new CustomDialog(mActivity, R.style.mystyle, R.layout.customdialog,
+                                mActivity.getResources().getString(R.string.hint_text), mActivity.getResources().getString(R.string.hint_delete_content));
+                        dialog.setOnButtonSureClickListener(new View.OnClickListener() {
+                            @Override
+                            public void onClick(View v) {
+                                deleteComment();
+                            }
+                        });
+                        dialog.show();
+                        break;
+                    case CLICK_DELETE_REPLY:
+                        deleteReply();
+                        break;
+                }
+                pop.dismiss();
+            }
+        });
+        tvReply = (TextView) view.findViewById(R.id.tv_comment_reply);
+        tvReply.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pop.dismiss();
+                if (mActivity.isTokenEmpty()) return;
+                boolean noTalk = isNoTalk(String.format(getResources().getString(R.string.disable_text), detailModel.getData().getNoTalkTime()));
+                if (noTalk) return;
+                etComment.setHint(String.format(getResources().getString(R.string.reply_original_poster), nickName));
+                etComment.requestFocus();
+                etComment.setFocusableInTouchMode(true);
+                etComment.setFocusable(true);
+                showKeyboard();
+            }
+        });
+        tvCancel = (TextView) view.findViewById(R.id.tv_comment_cancel);
+        tvCancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pop.dismiss();
+            }
+        });
+        reportLine = view.findViewById(R.id.comment_report_line);
+        replyLine = view.findViewById(R.id.comment_reply_line);
+        deleteLine = view.findViewById(R.id.comment_delete_line);
+        View empty = view.findViewById(R.id.view_empty);
+        empty.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pop.dismiss();
+            }
+        });
+    }
+
+    private void initListView() {
+        adapter = new VideosDetailsAdapter(mActivity, this);
+        adapter.setOnCommentClickListing(new VideosDetailsAdapter.onCommentClickListener() {
+
+            @Override
+            public void replyComment(String paramCommentId, String paramNickName, String paramReplyId, String paramReplyType, String paramReportType, int paramPosition) {
+                submit_type = SUBMIT_TYPE_REPLY;
+                position = paramPosition;
+                commentId = paramCommentId;
+                replyId = paramReplyId;
+                replyType = paramReplyType;
+                nickName = paramNickName;
+                reportType = paramReportType;
+                if (replyType.equals("1")) {
+                    if (mActivity.isTokenEmpty()) return;
+                    etComment.setHint(getResources().getString(R.string.reply_floor));
+                    boolean noTalk = isNoTalk(String.format(getResources().getString(R.string.disable_text), detailModel.getData().getNoTalkTime()));
+                    if (noTalk) return;
+                    listView.getRefreshableView().setSelectionFromTop(position + 1, DensityUtils.dip2px(mActivity, 60));
+                    showKeyboard();
+                } else {
+                    tvDelete.setVisibility(View.GONE);
+                    deleteLine.setVisibility(View.GONE);
+                    tvReply.setVisibility(View.VISIBLE);
+                    tvReport.setVisibility(View.VISIBLE);
+                    replyLine.setVisibility(View.VISIBLE);
+                    reportLine.setVisibility(View.VISIBLE);
+                    hideKeyboard();
+                    pop.showAtLocation(rootView, Gravity.BOTTOM, 0, 0);
+                }
+            }
+
+            @Override
+            public void deleteComment(String paramCommentId, int paramPosition) {
+                position = paramPosition;
+                commentId = paramCommentId;
+                clickType = CLICK_DELETE_COMMENT;
+                tvDelete.setText(getResources().getString(R.string.delete_floor));
+                tvReply.setVisibility(View.GONE);
+                tvReport.setVisibility(View.GONE);
+                replyLine.setVisibility(View.GONE);
+                reportLine.setVisibility(View.GONE);
+                tvDelete.setVisibility(View.VISIBLE);
+                deleteLine.setVisibility(View.VISIBLE);
+                hideKeyboard();
+                pop.showAtLocation(rootView, Gravity.BOTTOM, 0, 0);
+            }
+
+            @Override
+            public void deleteReply(String paramReplyId, int paramPosition, int paramReplyIndex) {
+                replyIndex = paramReplyIndex;
+                position = paramPosition;
+                replyId = paramReplyId;
+                clickType = CLICK_DELETE_REPLY;
+                tvDelete.setText(getResources().getString(R.string.deleted_text));
+                replyLine.setVisibility(View.GONE);
+                reportLine.setVisibility(View.GONE);
+                tvReply.setVisibility(View.GONE);
+                tvReport.setVisibility(View.GONE);
+                tvDelete.setVisibility(View.VISIBLE);
+                deleteLine.setVisibility(View.VISIBLE);
+                hideKeyboard();
+                pop.showAtLocation(rootView, Gravity.BOTTOM, 0, 0);
+            }
+
+            @Override
+            public void report(String paramCommentId, String paramReportType) {
+                commentId = paramCommentId;
+                reportType = paramReportType;
+                tvReport.setVisibility(View.VISIBLE);
+                reportLine.setVisibility(View.VISIBLE);
+                tvReply.setVisibility(View.GONE);
+                replyLine.setVisibility(View.GONE);
+                tvDelete.setVisibility(View.GONE);
+                deleteLine.setVisibility(View.GONE);
+                hideKeyboard();
+                pop.showAtLocation(rootView, Gravity.BOTTOM, 0, 0);
+            }
+
+            @Override
+            public void praise(String commentId, int status, int position) {
+                praisePosition = position;
+                praiseStatus = status;
+                VideoDetailsFragment.this.praise(commentId, String.valueOf(status));
+            }
+        });
+        adapter.setOnJumpUserHomePageListener(new VideosDetailsAdapter.OnJumpUserHomePageListener() {
+            @Override
+            public void jump(int userId) {
+                startUserProfileActivity(userId);
+            }
+        });
+
+        adapter.setOnJumpPostLoverPageListener(new VideosDetailsAdapter.OnJumpPostLoverPageListener() {
+            @Override
+            public void goPostLoverActivity(long postId, long postType) {
+                mActivity.startActivity(CommentLoverActivity.newInstance(mActivity, postId, postType,
+                        BeautyConstants.EXTRA_FROM_POST));
+            }
+        });
+
+        adapter.setOnSeedListener(new VideosDetailsAdapter.OnSeedListener() {
+            @Override
+            public void seed(long seedId, boolean isSeed, int position) {
+                positionSeed = position;
+                if (isSeed) {
+                    unCollectSeed(seedId);
+                } else {
+                    collectSeed(seedId, postId, Constants.TYPE_VIDEO_POST);
+                }
+            }
+
+            @Override
+            public void onBuy(long seedId, String url) {
+                mActivity.umengStatisticBuy(seedId);
+                if (mActivity.isTokenEmpty()) return;
+                startActivity(TaobaoProductDetailsActivity.newInstance(mActivity, url));
+            }
+        });
+
+        adapter.setOnCollectBeautyListener(new VideosDetailsAdapter.OnCollectBeautyListener() {
+            @Override
+            public void collect(long workId, boolean isCollect, int position) {
+                positionBeauty = position;
+                if (isCollect)
+                    collectWork(String.valueOf(workId));
+                else
+                    cancelCollectWork(String.valueOf(workId));
+            }
+        });
+        listView.setAdapter(adapter);
+        Utils.setupPullUpRefreshLabel(mActivity, listView);
+    }
+
+    private void showMoreDialog(final int postId) {
+        final Dialog dialog = new AlertDialog.Builder(getActivity()).create();
+        dialog.setCanceledOnTouchOutside(true);
+        Window window = dialog.getWindow();
+        window.setGravity(Gravity.BOTTOM);
+        window.setBackgroundDrawable(new BitmapDrawable());
+        dialog.show();
+        window.setContentView(R.layout.dialog_draft_more);
+        window.setLayout(DensityUtils.getWindowWidth(getActivity()), LinearLayout.LayoutParams.WRAP_CONTENT);
+        TextView tvEdit = (TextView) window.findViewById(R.id.tv_draft_more_edit);
+        tvEdit.setVisibility(View.GONE);
+
+        TextView tvDelete = (TextView) window.findViewById(R.id.tv_draft_more_delete);
+        TextView tvCancel = (TextView) window.findViewById(R.id.tv_draft_more_cancel);
+
+        tvDelete.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                lockScreen(true);
+                mPostDetailsPresenter.delete(token, (int) postType, String.valueOf(postId));
+                dialog.dismiss();
+            }
+        });
+        tvCancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                dialog.dismiss();
+            }
+        });
+    }
+
+    /**
+     * 收藏
+     */
+    private void collectWork(String workId) {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            Map<String, String> map = new HashMap<String, String>();
+            map.put(BeautyConstants.EXTRA_WROK_DETAILS_WORK_ID, String.valueOf(workId));
+            MobclickAgent.onEvent(mActivity, Constants.STATISTIC_CLICK_COLLECTION, map);
+            if (mActivity.isTokenEmpty()) return;
+            net.collectWork(APIKey.KEY_COLLECT_WORK, token, workId);
+        }
+    }
+
+    /**
+     * 取消收藏
+     */
+    private void cancelCollectWork(String workId) {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            if (mActivity.isTokenEmpty()) return;
+            net.cancelCollectWork(APIKey.KEY_UNCOLLECT_WORK, token, workId);
+        }
+    }
+
+    private void initData() {
+        imageLoader = ImageLoader.getInstance();
+        postId = mActivity.getIntent().getLongExtra(Constants.EXTRA_POST_ID, 1L);
+        postType = mActivity.getIntent().getLongExtra(Constants.EXTRA_POST_TYPE, 2L);
+        mActivity.setShareLink(Utils.getServerPath() + "/nggirl/h5/cosmetic/videoDetail.html?postId=" + String.valueOf(postId));
+
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            mActivity.lockScreen(true);
+            umengStatisticVideos();
+        }
+        noTalkDialog = new Dialog(mActivity, dialog);
+
+        timer = new Timer(true);
+        timer.schedule(task, 6 * 10000, 6 * 10000);
+
+        screenSwitchUtils = new ScreenSwitchUtils();
+        width = DensityUtils.getWidthInPx(mActivity);
+        threshold = DensityUtils.dip2px(mActivity, 18);
+
+        goodView = new GoodView(mActivity);
+        likeView = new LikeView(mActivity);
+    }
+
+    private void initEmojKeyboard(View view) {
+        ekBar = (SimpleUserdefEmoticonsKeyBoard) view.findViewById(R.id.ek_bar);
+        etComment = ekBar.getEtChat();
+        btnSend = (Button) view.findViewById(R.id.btn_send2);
+        ekBar.addOnResizeListener(new SoftKeyboardSizeWatchLayout.OnResizeListener() {
+            @Override
+            public void OnSoftPop(int i) {
+                llInput.setVisibility(View.VISIBLE);
+                llButton.setVisibility(View.GONE);
+            }
+
+            @Override
+            public void OnSoftClose() {
+                if (!emojPanelShown) {
+                    llInput.setVisibility(View.GONE);
+                    llButton.setVisibility(View.VISIBLE);
+                } else {
+                    llInput.setVisibility(View.VISIBLE);
+                    llButton.setVisibility(View.GONE);
+                }
+
+            }
+        });
+        ekBar.addOnFuncKeyBoardListener(new FuncLayout.OnFuncKeyBoardListener() {
+            @Override
+            public void OnFuncPop(int i) {
+                emojPanelShown = true;
+            }
+
+            @Override
+            public void OnFuncClose() {
+                emojPanelShown = false;
+                llInput.setVisibility(View.GONE);
+                llButton.setVisibility(View.VISIBLE);
+            }
+        });
+        etComment.setInputType(InputType.TYPE_NULL);
+        etComment.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mActivity.isTokenEmpty()) {
+                    etComment.setInputType(InputType.TYPE_NULL);
+                    return;
+                }
+                if (isNoTalk(String.format(getResources().getString(R.string.disable_text), detailModel.getData().getNoTalkTime())))
+                    return;
+                llButton.setVisibility(View.GONE);
+                llInput.setVisibility(View.VISIBLE);
+            }
+        });
+
+        etComment.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (!hasFocus && !etComment.getText().toString().trim().isEmpty()) {
+                    SettingUtils.instance().saveChatRecord(etComment.getText().toString().trim());
+                }
+            }
+        });
+
+        btnSend.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String content = etComment.getText().toString().trim();
+                if (TextUtils.isEmpty(content)) return;
+                if (mActivity.isTokenEmpty()) return;
+                mActivity.lockScreen(true);
+                switch (submit_type) {
+                    case SUBMIT_TYPE_COMMENT:
+                        comment();
+                        break;
+                    case SUBMIT_TYPE_REPLY:
+                        replyComment();
+                        break;
+                }
+                umengStatisticComments();
+                ekBar.onBackKeyClick();
+                llInput.setVisibility(View.GONE);
+                llButton.setVisibility(View.VISIBLE);
+            }
+        });
+
+        // emoticon click
+        final EmoticonClickListener emoticonClickListener = new EmoticonClickListener() {
+            @Override
+            public void onEmoticonClick(Object o, int actionType, boolean isDelBtn) {
+                if (isDelBtn) {
+                    final String textInput = etComment.getText().toString().trim();
+                    int selectionStart = etComment.getSelectionStart();// 获取光标的位置
+                    if (!TextUtils.isEmpty(textInput) && selectionStart > 0) {
+                        final String closeBracket = textInput.substring(textInput.length() - 1, textInput.length());
+                        if (closeBracket.equals("]")) {
+                            final int indexOpenBracket = textInput.lastIndexOf("[");
+                            String tempStr = textInput.substring(indexOpenBracket, textInput.length());
+                            if (!SmileUtils.containsKey(tempStr)) {
+                                int action = KeyEvent.ACTION_DOWN;
+                                int code = KeyEvent.KEYCODE_DEL;
+                                KeyEvent event = new KeyEvent(action, code);
+                                ekBar.getEtChat().onKeyDown(KeyEvent.KEYCODE_DEL, event);
+                            } else {
+                                etComment.getEditableText().delete(textInput.length() - tempStr.length(), textInput.length());
+                            }
+                        } else {
+                            int action = KeyEvent.ACTION_DOWN;
+                            int code = KeyEvent.KEYCODE_DEL;
+                            KeyEvent event = new KeyEvent(action, code);
+                            ekBar.getEtChat().onKeyDown(KeyEvent.KEYCODE_DEL, event);
+                        }
+
+                    }
+                } else {
+                    if (o == null) {
+                        return;
+                    }
+                    String content = null;
+                    if (o instanceof EmoticonEntity) {
+                        content = ((EmoticonEntity) o).getContent();
+                    }
+                    int index = ekBar.getEtChat().getSelectionStart();
+                    Editable editable = ekBar.getEtChat().getText();
+                    editable.insert(index, content);
+                }
+            }
+        };
+
+        // emoticon instantiate
+        final EmoticonDisplayListener emoticonDisplayListener = new EmoticonDisplayListener() {
+            @Override
+            public void onBindView(int i, ViewGroup viewGroup, EmoticonsAdapter.ViewHolder viewHolder, Object object, final boolean isDelBtn) {
+                final EmoticonEntity emojiBean = (EmoticonEntity) object;
+                if (emojiBean == null && !isDelBtn) {
+                    return;
+                }
+
+                viewHolder.ly_root.setBackgroundResource(com.keyboard.view.R.drawable.bg_emoticon);
+
+                if (isDelBtn) {
+                    viewHolder.iv_emoticon.setImageResource(R.drawable.delete_expression);
+                } else {
+                    displayImageFromDrawable(emojiBean.getIconUri(), viewHolder.iv_emoticon);
+                }
+                viewHolder.iv_emoticon.getLayoutParams().width = DensityUtils.dip2px(mActivity, 40);
+                viewHolder.iv_emoticon.getLayoutParams().height = DensityUtils.dip2px(mActivity, 40);
+                viewHolder.iv_emoticon.requestLayout();
+
+                viewHolder.rootView.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        emoticonClickListener.onEmoticonClick(emojiBean, 0, isDelBtn);
+                    }
+                });
+            }
+        };
+
+        // page instantiate
+        PageViewInstantiateListener pageViewInstantiateListener = new PageViewInstantiateListener<EmoticonPageEntity>() {
+            @Override
+            public View instantiateItem(ViewGroup viewGroup, int i, EmoticonPageEntity pageEntity) {
+                if (pageEntity.getRootView() == null) {
+                    EmoticonPageView pageView = new EmoticonPageView(viewGroup.getContext());
+                    pageView.setNumColumns(pageEntity.getRow());
+                    pageEntity.setRootView(pageView);
+                    try {
+                        EmoticonsAdapter adapter = new EmoticonsAdapter(viewGroup.getContext(), pageEntity, null);
+                        // emoticon instantiate
+                        adapter.setOnDisPlayListener(emoticonDisplayListener);
+                        pageView.getEmoticonsGridView().setAdapter(adapter);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+                return pageEntity.getRootView();
+            }
+        };
+
+        final ArrayList<EmoticonEntity> emoticonEntities = ParseDataUtils.ParseQqData(SmileUtils.emoticons);
+
+        // build
+        EmoticonPageSetEntity xhsPageSetEntity
+                = new EmoticonPageSetEntity.Builder()
+                .setLine(3)
+                .setRow(6)
+                .setEmoticonList(emoticonEntities)
+                .setIPageViewInstantiateItem(pageViewInstantiateListener)
+                .setShowDelBtn(EmoticonPageEntity.DelBtnStatus.FOLLOW)
+                .setIconUri(ImageBase.Scheme.DRAWABLE.toUri("ic_launcher"))
+                .build();
+
+        PageSetAdapter pageSetAdapter = new PageSetAdapter();
+        pageSetAdapter.add(xhsPageSetEntity);
+        ekBar.setAdapter(pageSetAdapter);
+
+        // add a filter
+        ekBar.getEtChat().addEmoticonFilter(new EmojiFilter());
+        //ekBar.getEtChat().addEmoticonFilter(new CustomEmojiFilter());
+    }
+
+    private void praise(String commentId, String status) {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            if (mActivity.isTokenEmpty()) return;
+            net.praiseComment(APIKey.KEY_ARTICLE_VIDEO_COMMNET_PRAISED, token, commentId, status);
+        }
+    }
+
+    private void loadDetails(int isCountViewNum) {
+        if (!Utils.isNetworkOn())
+            showShortToast(R.string.network_down);
+        else {
+            isLoader++;
+            net.getVideoPostDetail(APIKey.KEY_ARTICLE_POST_DETAIL, token, String.valueOf(postId), String.valueOf(postType), isCountViewNum);
+        }
+    }
+
+    private void loadComment() {
+        if (!Utils.isNetworkOn())
+            showShortToast(R.string.network_down);
+        else
+            net.getComments(APIKey.KEY_ARTICLE_VIDEO_COMMENTS, token, String.valueOf(postId), String.valueOf(postType), String.valueOf(pageIndex), String.valueOf(5), queryTime);
+    }
+
+    private void comment() {
+        String content = etComment.getText().toString().trim();
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else
+            net.saveComment(APIKey.KEY_ARTICLE_VIDEO_SAVE_COMMENT, token, String.valueOf(postId), String.valueOf(postType), content);
+    }
+
+    private void replyComment() {
+        String content = etComment.getText().toString().trim();
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else
+            net.replyComment(APIKey.KEY_ARTICLE_VIDEO_REPLY_COMMENT, token, String.valueOf(commentId), replyId, replyType, content);
+    }
+
+    private void deleteComment() {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else
+            net.deleteComment(APIKey.KEY_ARTICLE_VIDEO_DELETE_COMMENT, token, commentId);
+    }
+
+    private void deleteReply() {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else
+            net.deleteReply(APIKey.KEY_ARTICLE_VIDEO_DELETE_REPLY, token, replyId);
+    }
+
+    private void report() {
+        if (mActivity.isTokenEmpty()) return;
+
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+            return;
+        }
+
+        if (reportType.equals("1")) {
+            net.report(APIKey.KEY_ARTICLE_VIDEO_REPORT, token, commentId, reportType);
+        } else {
+            net.report(APIKey.KEY_ARTICLE_VIDEO_REPORT, token, String.valueOf(replyId), reportType);
+        }
+    }
+
+    private void hideEmojPanel() {
+        emojPanelShown = false;
+        ekBar.onBackKeyClick();
+    }
+
+    public String getWeiboShareContent() {
+        return String.format(getResources().getString(R.string.articles_or_videos_share_xl_title), "@", type, title);
+    }
+
+    public String getWecahtShareTitle() {
+        return String.format(getResources().getString(R.string.articles_or_videos_share_wx_title), type, title);
+    }
+
+    public String getWechatShareContent() {
+        return detailModel.getData().getShareContent();
+    }
+
+    @Override
+    protected void apiOnFailure(int key, String strMsg) {
+        super.apiOnFailure(key, strMsg);
+        mActivity.releaseScreen();
+        switch (key) {
+            case APIKey.KEY_ARTICLE_VIDEO_SAVE_COMMENT:
+                showShortToast(R.string.comment_send_failuse);
+                break;
+        }
+
+        if (!Utils.validateResponse(strMsg)) {
+            return;
+        }
+
+        ErrorMessageModel messageModel = gson.fromJson(strMsg, ErrorMessageModel.class);
+        showShortToast(messageModel.getData().getError());
+    }
+
+    @Override
+    protected void apiOnSuccess(int key, String strMsg) {
+        super.apiOnSuccess(key, strMsg);
+        switch (key) {
+            case APIKey.KEY_ARTICLE_POST_DETAIL:
+                isCountViewNum = 0;
+                detailModel = gson.fromJson(strMsg, VideosPostDetailsModel.class);
+                if (!isLoadDetails) {
+                    isLoadDetails = true;
+                    updateCollect();
+                    updateLike();
+                    data.clear();
+                    isAddEmptyView = false;
+                    mVideoPath = detailModel.getData().getVideoUrl();
+                    title = detailModel.getData().getTitle();
+                    type = detailModel.getData().getColumnName();
+
+                    if (Utils.isWifi()) {
+                        initSurfaceView();
+                        ivWifi.setImageResource(R.drawable.icon_video_view_wifi);
+                    } else if (isLoader <= 1) {
+                        llNoWifi.setVisibility(View.VISIBLE);
+                    }
+
+                    imageLoader.loadImage(detailModel.getData().getDetailImg(), new SimpleImageLoadingListener() {
+                        @Override
+                        public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
+                            super.onLoadingComplete(imageUri, view, loadedImage);
+                            if (getActivity() == null || !isAdded()) return;
+                            mActivity.setBitmap(loadedImage);
+                        }
+                    });
+
+                    playerBackground.setBackgroundResource(R.color.black);
+                    data.add(0, new NGVideosDetails(detailModel.getData()));
+                    List<VideosPostDetailsModel.VideoDetails.Seed> seeds = detailModel.getData().getArticle();
+                    int aritcleCount = 0;
+                    for (int i = 0; i < seeds.size(); i++) {
+                        if (!seeds.get(i).getContent().isEmpty()) {
+                            data.add(new NGVideosDetailsSeed(seeds.get(i)));
+                            aritcleCount++;
+                        }
+                    }
+                    adapter.setArticleCount(aritcleCount);
+                    data.add(new NGVideosDetailsLike(detailModel.getData()));
+                    loadComment();
+
+                    showStatusVeiw(detailModel.getData().getStatus());
+                } else {
+                    data.set(adapter.getArticleCount() + 1, new NGVideosDetailsLike(detailModel.getData()));
+                    adapter.setData(data);
+                    adapter.notifyDataSetChanged();
+                }
+
+                final boolean isMyPost = detailModel.getData().getIsMyPost() == 1;
+                if (isMyPost) {
+                    ivMore.setVisibility(View.VISIBLE);
+                } else {
+                    ivMore.setVisibility(View.GONE);
+                }
+
+                commentNum = detailModel.getData().getCommentNum();
+                lookNum = detailModel.getData().getViewNum();
+                loves = detailModel.getData().getLovers().size();
+
+                if (mActivity != null && isAdded()) {
+                    if (!Utils.isWifi()) {
+                        mActivity.releaseScreen();
+                    } else if (isLoader > 1) {
+                        mActivity.releaseScreen();
+                    }
+                }
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_COMMENTS:
+                ArticlesOrVideosCommentListModel commentListModel = gson.fromJson(strMsg, ArticlesOrVideosCommentListModel.class);
+                queryTime = String.valueOf(commentListModel.getData().getQueryTime());
+                if (pageIndex == 0 && commentListModel.getData().getComments().isEmpty()) {
+                    if (!isAddEmptyView) {
+                        data.add(new NGEmpty());
+                        isAddEmptyView = true;
+                        listView.getRefreshableView().removeFooterView(footer);
+                    }
+                    adapter.setData(data);
+                    adapter.notifyDataSetChanged();
+                    return;
+                } else if (commentListModel.getData().getComments().isEmpty()) {
+                    showShortToast(getResources().getString(R.string.no_more_data));
+                    return;
+                }
+                if (isAddEmptyView) {
+                    data.remove(adapter.getArticleCount() + 1);
+                    isAddEmptyView = false;
+                }
+                for (int i = 0; i < commentListModel.getData().getComments().size(); i++) {
+                    data.add(new NGComments(commentListModel.getData().getComments().get(i)));
+                }
+                commentCount = commentListModel.getData().getComments().size();
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                if (listView.getRefreshableView().getFooterViewsCount() == 1 && mActivity != null && isAdded()) {
+                    footer = mActivity.getLayoutInflater().inflate(R.layout.list_item_comment_footer, null);
+                    TextView tvAllComment = (TextView) footer.findViewById(R.id.tv_view_all_comment);
+                    tvAllComment.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            viewAllComment();
+                        }
+                    });
+                    listView.getRefreshableView().addFooterView(footer);
+                }
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_COLLECED:
+                detailModel.getData().setIsCollected(collectStatus);
+                updateCollect();
+                parse(strMsg);
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_PRAISED:
+                detailModel.getData().setIsPraised(likeStatus);
+                updateLike();
+                loadDetails(isCountViewNum);
+                parse(strMsg);
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_SAVE_COMMENT:
+                mActivity.releaseScreen();
+                if (isAddEmptyView) {
+                    data.remove(1);
+                    isAddEmptyView = false;
+                }
+                ArticlesOrVideosSubmitCommendModel comment = gson.fromJson(strMsg, ArticlesOrVideosSubmitCommendModel.class);
+                data.add(1, new NGComments(comment.getData()));
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                showShortToast(R.string.commented_success);
+                pageIndex++;
+                showToast(comment.getData().getAddScore());
+                etComment.setText("");
+                SettingUtils.instance().clearChatRecord();
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_REPLY_COMMENT:
+                mActivity.releaseScreen();
+                ArticlesOrVideosSubmitReplyModel reply = gson.fromJson(strMsg, ArticlesOrVideosSubmitReplyModel.class);
+                NGComments ngComments = (NGComments) data.get(position);
+                ngComments.getData().getReplies().add(reply.getData());
+                data.set(position, ngComments);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                showShortToast(R.string.commented_success);
+                showToast(reply.getData().getAddScore());
+                etComment.setText("");
+                SettingUtils.instance().clearChatRecord();
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_DELETE_COMMENT:
+                data.remove(position);
+                if (data.size() == adapter.getArticleCount() + 2) {
+                    if (!isAddEmptyView) {
+                        data.add(new NGEmpty());
+                        isAddEmptyView = true;
+                        adapter.setData(data);
+                        adapter.notifyDataSetChanged();
+                        listView.getRefreshableView().removeFooterView(footer);
+                    }
+                }
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                showShortToast(R.string.deleted_success);
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_DELETE_REPLY:
+                ((NGComments) data.get(position)).getData().getReplies().remove(replyIndex);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                showShortToast(R.string.deleted_success);
+                break;
+            case APIKey.KEY_ARTICLE_VIDEO_REPORT:
+                showShortToast(getResources().getString(R.string.reprot_success));
+                break;
+            case APIKey.KEY_COLLECTED_SEED:
+                ((NGVideosDetailsSeed) data.get(positionSeed)).getSeed().setIsSeed(1);
+                NGVideosDetailsSeed ngVideosDetailsSeed = (NGVideosDetailsSeed) data.get(positionSeed);
+                VideosPostDetailsModel.VideoDetails.Seed seed = ngVideosDetailsSeed.getSeed();
+                seed.setIsSeed(1);
+                seed.setSeedNum(seed.getSeedNum() + 1);
+                data.set(positionSeed, ngVideosDetailsSeed);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                parse(strMsg);
+                break;
+            case APIKey.KEY_DELETE_COLLECTED_SEEDS:
+                NGVideosDetailsSeed ngVideosDetailsSeedDel = (NGVideosDetailsSeed) data.get(positionSeed);
+                VideosPostDetailsModel.VideoDetails.Seed seedDel = ngVideosDetailsSeedDel.getSeed();
+                seedDel.setIsSeed(0);
+                seedDel.setSeedNum(seedDel.getSeedNum() - 1);
+                data.set(positionSeed, ngVideosDetailsSeedDel);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                break;
+
+            case APIKey.KEY_ARTICLE_VIDEO_COMMNET_PRAISED:
+                NGComments ngComment = (NGComments) data.get(praisePosition);
+                ngComment.getData().setIsPraised(praiseStatus);
+                if (praiseStatus == 1)
+                    ngComment.getData().setPraiseCount(ngComment.getData().getPraiseCount() + 1);
+                else
+                    ngComment.getData().setPraiseCount(ngComment.getData().getPraiseCount() - 1);
+                data.set(praisePosition, ngComment);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                parse(strMsg);
+                break;
+            case APIKey.KEY_COLLECT_WORK:
+                NGVideosDetailsSeed ngBeautyCollect = (NGVideosDetailsSeed) data.get(positionBeauty);
+                VideosPostDetailsModel.VideoDetails.Seed beauty = ngBeautyCollect.getSeed();
+                beauty.setWorkIsCollected(1);
+                beauty.setCollectNum(beauty.getCollectNum() + 1);
+                data.set(positionBeauty, ngBeautyCollect);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                break;
+            case APIKey.KEY_UNCOLLECT_WORK:
+                mActivity.releaseScreen();
+                NGVideosDetailsSeed ngBeautyUNCollect = (NGVideosDetailsSeed) data.get(positionBeauty);
+                VideosPostDetailsModel.VideoDetails.Seed beauty2 = ngBeautyUNCollect.getSeed();
+                beauty2.setWorkIsCollected(0);
+                beauty2.setCollectNum(beauty2.getCollectNum() - 1);
+                data.set(positionBeauty, ngBeautyUNCollect);
+                adapter.setData(data);
+                adapter.notifyDataSetChanged();
+                break;
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        isShow = true;
+
+        if (Utils.isScreenOriatationPortrait(mActivity)) {
+            mActivity.setPagingEnabled(true);
+
+            ivBackUp.setVisibility(View.VISIBLE);
+            llVideosDetails.setBackgroundColor(this.getResources().getColor(R.color.bg_base));
+            llButton.setVisibility(View.VISIBLE);
+            ivShare.setVisibility(View.VISIBLE);
+
+            llFullScreen.setVisibility(View.VISIBLE);
+            rlTop.setVisibility(View.GONE);
+
+            isLock = false;
+            ivLock.setImageResource(R.drawable.icon_video_view_unlock);
+            ivScreen.setClickable(true);
+        } else {
+            mActivity.setPagingEnabled(false);
+
+            ivBackUp.setVisibility(View.GONE);
+            llVideosDetails.setBackgroundColor(this.getResources().getColor(R.color.black));
+            llButton.setVisibility(View.GONE);
+            ivShare.setVisibility(View.GONE);
+
+            llFullScreen.setVisibility(View.GONE);
+            rlTop.setVisibility(View.VISIBLE);
+        }
+    }
+
+    public boolean onBackPressed() {
+        if (!Utils.isScreenOriatationPortrait(mActivity)) {
+            switchPortraitLandscape();
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private void umengStatisticVideos() {
+        mActivity.umengStatisticVideos();
+    }
+
+    private void umengStatisticComments() {
+        mActivity.umengStatisticComments();
+    }
+
+    private void umengStatisticPraise() {
+        mActivity.umengStatisticPraise();
+    }
+
+    private void umengStatisticCollect() {
+        mActivity.umengStatisticCollect();
+    }
+
+    private void umengStatisticShared() {
+        mActivity.umengStatisticShared();
+    }
+
+    private void umengStatisticRelatedProducts() {
+        mActivity.umengStatisticRelatedProducts();
+    }
+    private void viewAllComment() {
+        startActivityForResult(CommentListArticlesOrVideosActivity.newInstance(mActivity,
+                postId,
+                postType,
+                detailModel.getData().getIsNoTalk(),
+                detailModel.getData().getNoTalkTime()),
+                VIDEOS_DETAILS_REQUEST);
+    }
+
+    private void collect() {
+        if (mActivity.isTokenEmpty()) return;
+        if (Utils.isNetworkOn()) {
+            collectStatus = detailModel.getData().getIsCollected() == 0 ? 1 : 0;
+            net.collectPost(APIKey.KEY_ARTICLE_VIDEO_COLLECED, token, String.valueOf(postId), String.valueOf(postType), String.valueOf(collectStatus));
+        } else {
+            showShortToast(R.string.network_down);
+        }
+        umengStatisticCollect();
+    }
+
+    private void like() {
+        if (mActivity.isTokenEmpty()) return;
+        if (Utils.isNetworkOn()) {
+            likeStatus = detailModel.getData().getIsPraised() == 0 ? 1 : 0;
+
+            if (likeStatus == 1) {
+                goodView.setImage(getResources().getDrawable(R.drawable.works_like_btn_hl));
+                goodView.setAlpha(0f, 1f);
+                goodView.show(ivLike);
+            } else {
+                likeView.show(ivLike);
+            }
+
+            net.praisePost(APIKey.KEY_ARTICLE_VIDEO_PRAISED, token, String.valueOf(postId), String.valueOf(postType), String.valueOf(likeStatus));
+        } else {
+            showShortToast(R.string.network_down);
+        }
+        umengStatisticPraise();
+    }
+
+    private void share() {
+        mActivity.showDialog();
+        umengStatisticShared();
+    }
+
+    private void updateCollect() {
+        if (detailModel.getData().getIsCollected() == 0)
+            ivCollect.setBackgroundResource(R.drawable.topbar_collection_btn);
+        else
+            ivCollect.setBackgroundResource(R.drawable.topbar_collection_btn_hl);
+    }
+
+    private void updateLike() {
+        if (detailModel.getData().getIsPraised() == 0)
+            ivLike.setBackgroundResource(R.drawable.works_like_btn);
+        else
+            ivLike.setBackgroundResource(R.drawable.works_like_btn_hl);
+    }
+
+    private void showDialog(String message) {
+        final View disable = mActivity.getLayoutInflater().inflate(R.layout.dialog_disable, null);
+        noTalkDialog.setContentView(disable);
+        TextView tvMessage = (TextView) disable.findViewById(R.id.dialog_message);
+        tvMessage.setText(message);
+        Button btnSure = (Button) disable.findViewById(R.id.btn_sure);
+        btnSure.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                noTalkDialog.dismiss();
+            }
+        });
+        noTalkDialog.setCanceledOnTouchOutside(false);
+        noTalkDialog.setCancelable(true);
+        if (!noTalkDialog.isShowing())
+            noTalkDialog.show();
+    }
+
+    private boolean isNoTalk(String message) {
+        if (detailModel.getData().getIsNoTalk() == 1) {
+            showDialog(message);
+            return true;
+        }
+        return false;
+    }
+
+    private void startUserProfileActivity(int userId) {
+        startActivity(UserProfileActivity.newInstance(mActivity, userId));
+    }
+
+    public void startProductDetailsActivity(long seedProductId) {
+        final Intent intent = SeedProductDetailsActivity.newInstance(mActivity,
+                seedProductId,
+                postId,
+                Constants.TYPE_VIDEO_POST);
+        startActivityForResult(intent, SEED_PRODUCT_DETAILS_REQUEST);
+    }
+
+    private void collectSeed(long SeedId, long targetId, int targetType) {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            if (mActivity.isTokenEmpty()) return;
+            net.collectedSeed(APIKey.KEY_COLLECTED_SEED, token, String.valueOf(SeedId), targetId, targetType);
+        }
+    }
+
+    private void unCollectSeed(long SeedId) {
+        if (!Utils.isNetworkOn()) {
+            showShortToast(R.string.network_down);
+        } else {
+            if (mActivity.isTokenEmpty()) return;
+            net.deleteCollectedSeed(APIKey.KEY_DELETE_COLLECTED_SEEDS, token, String.valueOf(SeedId));
+        }
+    }
+
+    public void startRelatedProductActivity(long postId, long postType) {
+        startActivityForResult(RelatedProductsActivity.newInstance(
+                mActivity,
+                String.valueOf(postType),
+                String.valueOf(postId)), RELATED_PRODUCT_DETAILS_REQUEST);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+            case VIDEOS_DETAILS_REQUEST:
+            case SEED_PRODUCT_DETAILS_REQUEST:
+            case RELATED_PRODUCT_DETAILS_REQUEST:
+                isLoadDetails = false;
+                isAddEmptyView = false;
+                loadDetails(isCountViewNum);
+                break;
+        }
+    }
+
+    // 播放完成后的处理
+    private void setVideoStop(){
+        isRun = false;
+    }
+
+    private void setVideoStart(){
+        isRun = true;
+    }
+
+    private void setImageStart(){
+        ivVideoRun.setImageResource(R.drawable.icon_video_start);
+    }
+
+    private void setImageStop(){
+        ivVideoRun.setImageResource(R.drawable.icon_video_stop);
+    }
+
+    private void switchPortraitLandscape() {
+        // 为竖屏
+        if(Utils.isScreenOriatationPortrait(mActivity)) {
+            ivScreen.setImageResource(R.drawable.icon_video_in);
+            mActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
+            mSurfaceViewUtils.setScreenone();
+
+            screenSwitchUtils.start(mActivity);
+        }else {
+            ivScreen.setImageResource(R.drawable.icon_video_out);
+            mActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+
+            mSurfaceViewUtils.setScreenTwo();
+
+            screenSwitchUtils.stop();
+        }
+    }
+
+    // 获取当前时间，并格式化
+    private String getCurrentTime() {
+        DateFormat formatter = new SimpleDateFormat("HH:mm");
+        return formatter.format(new Date(System.currentTimeMillis()));
+    }
+
+    final Handler handler = new Handler() {
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case OPERATION_SYSTEM_TIME:
+                    tvTopTime.setText(getCurrentTime());
+                    break;
+                case OPERATION_VIDEO_RUN:
+                    setVideoStart();
+                    setImageStop();
+                    break;
+                case OPERATION_VIDEO_STOP:
+                    setVideoStop();
+                    setImageStart();
+                    break;
+                case OPERATION_VIDEO_ERROR:
+                    setVideoError();
+                    mActivity.releaseScreen();
+                    break;
+                case OPERATION_VIDEO_LOADING:
+                    ivLoading.setVisibility(View.GONE);
+                    llVideoLoading.setVisibility(View.GONE);
+                    mActivity.releaseScreen();
+                    break;
+                case OPERATION_VIDEO_LOAD:
+                    ivLoading.setVisibility(View.VISIBLE);
+                    llVideoLoading.setVisibility(View.VISIBLE);
+                    break;
+                case OPERATION_VIDEO_GONE_ERROR_VIEW:
+                    llVideoError.setVisibility(View.GONE);
+                    break;
+                case OPERATION_VIDEO_LOCK_SCREEN:
+                    mActivity.lockScreen(true);
+                    break;
+
+            }
+            super.handleMessage(msg);
+        }
+    };
+
+    // 定时更新系统时间
+    TimerTask task = new TimerTask(){
+        public void run() {
+            Message message = Message.obtain();
+            message.what = 1;
+            handler.sendMessage(message);
+        }
+    };
+
+    private void initSurfaceView() {
+        if (!TextUtils.isEmpty(mVideoPath)) {
+            if (mSurfaceViewUtils == null) {
+                mSurfaceViewUtils = new SurfaceViewUtils(mVideoPath, mActivity.getApplicationContext(), handler);
+                mSurfaceViewUtils.setLayout(surfaceView, seekBar, ivLoading, llVideoLoading, tvTime);
+                mSurfaceViewUtils.setTouchView(tvSpeed, ivSpeed, pbVolume, pbLight);
+                tvTitle.setText(detailModel.getData().getTitle());
+            }
+        }else {
+            llVideoError.setVisibility(View.VISIBLE);
+            mActivity.releaseScreen();
+        }
+    }
+
+    private void onBatteryInfoReceiver(int intLevel){
+        if(intLevel > 80){// 80-100
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery5);
+        }else if(intLevel > 60){// 60-80
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery4);
+        }else if (intLevel > 40){// 40-60
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery3);
+        }else if (intLevel > 20){// 20-40
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery2);
+        }else if(intLevel > 0){// 0-20
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery1);
+        }else {
+            ivBattery.setImageResource(R.drawable.icon_video_view_battery);
+        }
+    }
+
+    private BroadcastReceiver mBatInfoReveiver = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+
+            // 判断是否处于充电状态
+            boolean isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL;
+
+            if (isCharging){
+                onBatteryInfoReceiver(-1);
+            }else {
+                onBatteryInfoReceiver(level);
+            }
+
+            networkStateMonitor();
+        }
+    };
+
+    private void registerReceiver() {
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(Intent.ACTION_BATTERY_CHANGED);
+        intentFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        mActivity.registerReceiver(mBatInfoReveiver, intentFilter);
+    }
+
+    private void networkStateMonitor() {
+        ConnectivityManager manager = (ConnectivityManager) mActivity.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = manager.getActiveNetworkInfo();
+        if (null == activeNetworkInfo){
+            setNetwork(NETWORK_STATE_DOWN );
+            return;
+        }
+
+        int type = manager.getActiveNetworkInfo().getType();
+        if (type == ConnectivityManager.TYPE_WIFI) {
+            // wifi网络
+            setNetwork(NETWORK_STATE_WIFI );
+        } else if(type == ConnectivityManager.TYPE_MOBILE){
+            // 移动网络
+            setNetwork(NETWORK_STATE_MOBILE_DATA_PLAN );
+        }
+    }
+
+    private void setNetwork(int type) {
+        if (type == NETWORK_STATE_WIFI ) {
+            ivWifi.setImageResource(R.drawable.icon_video_view_wifi);
+        }else if(type == NETWORK_STATE_MOBILE_DATA_PLAN ) {
+            ivWifi.setImageResource(R.drawable.icon_video_view_no_wifi);
+            showShortToast(getString(R.string.video_view_network_warn));
+        }else {
+            ivWifi.setImageResource(R.drawable.icon_video_view_no_wifi);
+            showShortToast(getString(R.string.video_view_no_net));
+        }
+    }
+
+    private void setVideoError() {
+        llVideoError.setVisibility(View.VISIBLE);
+    }
+
+    private void setVideoBottom() {
+        if (Utils.isScreenOriatationPortrait(mActivity)) {
+            if (isShow) {
+                rlBottom.setVisibility(View.GONE);
+            }else {
+                rlBottom.setVisibility(View.VISIBLE);
+            }
+        }else {
+            if (isShow) {
+                rlBottom.setVisibility(View.GONE);
+                rlTop.setVisibility(View.GONE);
+            }else {
+                rlBottom.setVisibility(View.VISIBLE);
+                rlTop.setVisibility(View.VISIBLE);
+            }
+        }
+        isShow = !isShow;
+    }
+
+    View.OnTouchListener onTouchListener = new View.OnTouchListener() {
+        @Override
+        public boolean onTouch(View v, MotionEvent event) {
+            final float x = event.getX();
+            final float y = event.getY();
+
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    mLastMotionX = x;
+                    mLastMotionY = y;
+                    startX = (int) x;
+                    startY = (int) y;
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    float deltaX = x - mLastMotionX;
+                    float deltaY = y - mLastMotionY;
+                    float absDeltaX = Math.abs(deltaX);
+                    float absDeltaY = Math.abs(deltaY);
+                    // 声音调节标识
+                    boolean isAdjustAudio = false;
+                    if (absDeltaX > threshold && absDeltaY > threshold) {
+                        if (absDeltaX < absDeltaY) {
+                            isAdjustAudio = true;
+                        } else {
+                            isAdjustAudio = false;
+                        }
+                    } else if (absDeltaX < threshold && absDeltaY > threshold) {
+                        isAdjustAudio = true;
+                    } else if (absDeltaX > threshold && absDeltaY < threshold) {
+                        isAdjustAudio = false;
+                    } else {
+                        return true;
+                    }
+                    if (isAdjustAudio) {
+                        if (x < width / 2) {
+                            if (!Utils.isScreenOriatationPortrait(mActivity)) {
+                                llLightPb.setVisibility(View.VISIBLE);
+                            }
+                            if (deltaY > 0) {
+                                mSurfaceViewUtils.lightDown(absDeltaY);
+                            } else if (deltaY < 0) {
+                                mSurfaceViewUtils.lightUp(absDeltaY);
+                            }
+                        } else {
+                            if (!Utils.isScreenOriatationPortrait(mActivity)) {
+                                llVolumePb.setVisibility(View.VISIBLE);
+                            }
+                            if (deltaY > 0) {
+                                mSurfaceViewUtils.volumeDown(absDeltaY);
+                            } else if (deltaY < 0) {
+                                mSurfaceViewUtils.volumeUp(absDeltaY);
+                            }
+                        }
+                    } else {
+                        if (!Utils.isScreenOriatationPortrait(mActivity)) {
+                            rlSpeed.setVisibility(View.VISIBLE);
+                        }
+                        if (deltaX > 0) {
+                            mSurfaceViewUtils.forward(absDeltaX);
+                        } else if (deltaX < 0) {
+                            mSurfaceViewUtils.backward(absDeltaX);
+                        }
+                    }
+                    mLastMotionX = x;
+                    mLastMotionY = y;
+                    break;
+                case MotionEvent.ACTION_UP:
+                    if (Math.abs(x - startX) > threshold
+                            || Math.abs(y - startY) > threshold) {
+                        isClick = false;
+                    }
+                    mLastMotionX = 0;
+                    mLastMotionY = 0;
+                    startX = 0;
+                    if (isClick) {
+                        setVideoBottom();
+                    }
+                    rlSpeed.setVisibility(View.GONE);
+                    llVolumePb.setVisibility(View.GONE);
+                    llLightPb.setVisibility(View.GONE);
+                    isClick = true;
+                    break;
+            }
+            return true;
+        }
+    };
+
+    protected void displayImageFromDrawable(String imageUri, ImageView imageView) {
+        int resID = getResources().getIdentifier(imageUri, "mipmap", mActivity.getPackageName());
+        if (resID <= 0) {
+            resID = getResources().getIdentifier(imageUri, "drawable", mActivity.getPackageName());
+        }
+        if (resID > 0 && imageView != null) {
+            imageView.setImageResource(resID);
+        }
+    }
+
+    private void showCommentRules() {
+        SettingUtils.getInstance(mActivity).savePostRulesDisplay(true);
+        alertDialog = new AlertDialog.Builder(mActivity).create();
+        alertDialog.setCanceledOnTouchOutside(false);
+        alertDialog.setCancelable(true);
+        Window window = alertDialog.getWindow();
+        window.setGravity(Gravity.CENTER);
+        window.setWindowAnimations(R.style.mydialogstyle);
+        window.setBackgroundDrawable(new BitmapDrawable());
+        alertDialog.show();
+        window.setContentView(R.layout.dialog_comment_rules);
+        window.setLayout((int) (DensityUtils.getWindowWidth(mActivity) * 0.8), LinearLayout.LayoutParams.WRAP_CONTENT);
+        window.findViewById(R.id.tv_know).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                alertDialog.dismiss();
+            }
+        });
+    }
+
+    private void parse(String strMsg) {
+        ScoreReminderModel fromJson = gson.fromJson(strMsg, ScoreReminderModel.class);
+        int addScore = fromJson.getData().getAddScore();
+        showToast(addScore);
+    }
+
+    private void showToast(int addScore) {
+        if (addScore > 0) {
+            showImageToast(String.format(getResources().getString(R.string.score_reminder), String.valueOf(addScore)));
+        }
+    }
+
+    public void returnUpdateStatus() {
+        Intent intent = new Intent();
+        intent.putExtra(Constants.EXTRA_POST_ID, postId);
+        intent.putExtra(Constants.LOOK_NUM, lookNum);
+        intent.putExtra(Constants.COMMENT_NUM, commentNum);
+        intent.putExtra(Constants.LOVES, loves);
+        if (mActivity != null) {
+            mActivity.setResult(RESULT_OK, intent);
+        }
+    }
+
+    private void showStatusVeiw(int status) {// 2:已上线，1:审核中
+        if (status == 2) {
+            llButton.setVisibility(View.VISIBLE);
+            ivShare.setVisibility(View.VISIBLE);
+        } else {
+            llButton.setVisibility(View.GONE);
+            ivShare.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    public void showDeleteSuccess() {
+        showShortToast(getResources().getString(R.string.draft_more_delete_success));
+        getActivity().finish();
+    }
+
+    @Override
+    public void showDeleteFailed(ApiException throwable) {
+        showShortToast(getResources().getString(R.string.deleted_failed));
+        Log.e(TAG, throwable.toString());
+    }
+
+    @Override
+    public void setPresenter(PostDetailsContract.Presenter presenter) {
+        if (presenter == null) {
+            throw new NullPointerException();
+        }
+        mPostDetailsPresenter = presenter;
+    }
+}

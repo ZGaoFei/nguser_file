@@ -1,0 +1,302 @@
+product_details_inner_view:轮播图的单个图片布局文件
+
+product_details_view_pager:轮播图布局
+
+product_details_center:中间布局
+
+item_product_details_comment:评论布局
+
+                            startActivity(ProductDetailsActivity.newInstance(mActivity, nggirlItem.getProductsResponse().getTb_item_id()));
+
+                        startActivity(ProductDetailsActivity.newInstance(mActivity, "1"));
+
+
+=====================================================
+
+package cn.com.nggirl.nguser.mall.productdetails;
+
+import android.content.Context;
+import android.content.Intent;
+import android.os.Bundle;
+import android.support.v7.widget.CardView;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
+
+import com.chad.library.adapter.base.BaseQuickAdapter;
+import com.chad.library.adapter.base.BaseViewHolder;
+import com.facebook.drawee.view.SimpleDraweeView;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import cn.bingoogolapple.bgabanner.BGABanner;
+import cn.com.nggirl.commons.FrescoUtils;
+import cn.com.nggirl.nguser.R;
+import cn.com.nggirl.nguser.account.AccountManager;
+import cn.com.nggirl.nguser.mall.business.response.ProductDetailsResponse;
+import cn.com.nggirl.nguser.model.net.ApiException;
+import cn.com.nggirl.nguser.presenter.ProductDetailsPresenter;
+import cn.com.nggirl.nguser.presenter.contract.ProductDetailsContract;
+import cn.com.nggirl.nguser.ui.activity.BaseActivity;
+import cn.com.nggirl.nguser.utils.TimeUtils;
+
+public class ProductDetailsActivity extends BaseActivity implements ProductDetailsContract.View{
+    private static final String PRODUCT_ID = "product_id";
+
+    //top
+    @BindView(R.id.rl_product_details_title)RelativeLayout rlTop;
+    @BindView(R.id.iv_product_details_left)ImageView ivBack;
+    @BindView(R.id.tv_product_details_title)TextView tvTitle;
+    @BindView(R.id.iv_product_details_share)ImageView ivShare;
+    // bottom
+    @BindView(R.id.ll_product_details_seed)LinearLayout llSeed;
+    @BindView(R.id.ll_product_details_shopping)LinearLayout llShopping;
+    @BindView(R.id.ll_product_details_add_cart)LinearLayout llAddCart;
+    @BindView(R.id.ll_product_details_buy)LinearLayout llBuy;
+    @BindView(R.id.ll_product_details_down)LinearLayout llDown;
+    // banner
+    @BindView(R.id.product_details_view_pager)BGABanner banner;
+    // center
+    @BindView(R.id.tv_product_details_center_title)TextView tvCenterTitle;
+    @BindView(R.id.tv_product_details_subtitle)TextView tvSubtitle;
+    @BindView(R.id.tv_product_details_price)TextView tvPrice;
+    @BindView(R.id.tv_product_details_selected)TextView tvSelected;
+    @BindView(R.id.tv_product_details_comment_num)TextView tvCommentNum;
+    @BindView(R.id.tv_product_details_all_comment)TextView tvAllComment;
+    // comment
+    @BindView(R.id.iv_product_details_header)SimpleDraweeView ivHeader;
+    @BindView(R.id.tv_product_details_nick)TextView tvNick;
+    @BindView(R.id.tv_product_details_time)TextView tvTime;
+    @BindView(R.id.tv_product_details_model)TextView tvModel;
+    @BindView(R.id.tv_product_details_comment_content)TextView tvCommentContent;
+    @BindView(R.id.rv_product_details_image)RecyclerView rvImages;
+    @BindView(R.id.tv_product_details_reply)TextView tvReply;
+    // sku
+    @BindView(R.id.ll_product_details_sku_one)LinearLayout llSkuOne;
+    @BindView(R.id.tv_product_details_key_one)TextView tvKeyOne;
+    @BindView(R.id.tv_product_details_value_one)TextView tvValueOne;
+    @BindView(R.id.ll_product_details_sku_two)LinearLayout llSkuTwo;
+    @BindView(R.id.tv_product_details_key_two)TextView tvKeyTwo;
+    @BindView(R.id.tv_product_details_value_two)TextView tvValueTwo;
+    @BindView(R.id.ll_product_details_sku_three)LinearLayout llSkuThree;
+    @BindView(R.id.tv_product_details_key_three)TextView tvKeyThree;
+    @BindView(R.id.tv_product_details_value_three)TextView tvValueThree;
+    @BindView(R.id.ll_product_details_sku_all)LinearLayout llSkuAll;
+    // details
+    @BindView(R.id.rv_product_details)RecyclerView recyclerView;
+    // notes
+    @BindView(R.id.iv_product_details_promise_one)ImageView ivPromiseOne;
+    @BindView(R.id.tv_product_details_promise_one)TextView tvPromiseOne;
+    @BindView(R.id.iv_product_details_promise_two)ImageView ivPromiseTwo;
+    @BindView(R.id.tv_product_details_promise_two)TextView tvPromiseTwo;
+    @BindView(R.id.ll_product_details_notes_one)LinearLayout llNotesOne;
+    @BindView(R.id.tv_product_details_notes_one)TextView tvNotesOne;
+    @BindView(R.id.ll_product_details_notes_two)LinearLayout llNotesTwo;
+    @BindView(R.id.tv_product_details_notes_two)TextView tvNotesTwo;
+    @BindView(R.id.ll_product_details_notes_all)LinearLayout llNotesAll;
+
+    private ProductDetailsContract.Presenter presenter;
+    private String productId;
+
+    private DetailsAdapter adapter;
+
+    public static Intent newInstance(Context context, String productId) {
+        Intent intent = new Intent(context, ProductDetailsActivity.class);
+        intent.putExtra(PRODUCT_ID, productId);
+        return intent;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_product_details);
+        ButterKnife.bind(this);
+        initView();
+        initData();
+        initListener();
+
+        token = AccountManager.instance().getToken();
+        presenter.loadData(token, "1");
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        super.onPause();
+        if (presenter != null) {
+            presenter.unsubscribe();
+        }
+    }
+
+    private void initView() {
+
+    }
+
+    private void initData() {
+        presenter = new ProductDetailsPresenter(this);
+
+        productId = getIntent().getStringExtra(PRODUCT_ID);
+    }
+
+    private void initListener() {
+
+    }
+
+    @Override
+    public void showLoadEmpty() {
+
+    }
+
+    @Override
+    public void showLoadError(ApiException throwable) {
+
+    }
+
+    @Override
+    public void showLoadHeadTitle(ProductDetailsResponse headResponse) {
+        tvCenterTitle.setText(headResponse.getName());
+        tvSubtitle.setText(headResponse.getReamTitle());
+        String format = String.format(getResources().getString(R.string.product_details_price), headResponse.getMarketPrice());
+        tvPrice.setText(format);
+        tvCommentNum.setText("(" + headResponse.getTotalCommentNum() + ")");
+    }
+
+    @Override
+    public void showLoadHeadImages(final List<ProductDetailsResponse.HeadImgsBean> imageList) {
+        List<String> list = new ArrayList<>();
+        for (int i = 0; i < imageList.size(); i++) {
+            list.add(imageList.get(i).getUrl());
+        }
+
+        ViewGroup.LayoutParams params = banner.getLayoutParams();
+        params.height = imageList.get(0).getHeight();
+        banner.setLayoutParams(params);
+
+        banner.setAdapter(new BGABanner.Adapter<CardView, String>() {
+            @Override
+            public void fillBannerItem(BGABanner banner, CardView itemView, String model, int position) {
+                SimpleDraweeView simpleDraweeView = (SimpleDraweeView) itemView.findViewById(R.id.sdv_product_details_content);
+                FrescoUtils.loadImage(model, simpleDraweeView);
+            }
+        });
+        banner.setData(R.layout.product_details_inner_view, list, null);
+    }
+
+    @Override
+    public void showLoadSku(ProductDetailsResponse.ItemSkuBean skuBean) {
+        tvSelected.setText(skuBean.getSkus().get(0).getSkuName());
+    }
+
+    @Override
+    public void showComment(ProductDetailsResponse.CommentBean commentBean) {
+        FrescoUtils.loadImage(commentBean.getProfile(), ivHeader);
+        tvNick.setText(commentBean.getNickName());
+        tvTime.setText(TimeUtils.paserDate(commentBean.getCreateTime()));
+        tvModel.setText(commentBean.getSkuName());
+        tvCommentContent.setText(commentBean.getContent());
+        tvReply.setText(commentBean.getOfficialReply());
+
+        GridLayoutManager manager = new GridLayoutManager(this, 3);
+        rvImages.setLayoutManager(manager);
+        CommentImageAdapter imageAdapter = new CommentImageAdapter(commentBean.getImgUrls());
+        rvImages.setAdapter(imageAdapter);
+    }
+
+    @Override
+    public void showProperties(List<ProductDetailsResponse.PropertiesBean> list) {
+        LinearLayout[] sku = new LinearLayout[] {llSkuOne, llSkuTwo, llSkuThree};
+        TextView[] tvKey = new TextView[] {tvKeyOne, tvKeyTwo, tvKeyThree};
+        TextView[] tvValue = new TextView[] {tvValueOne, tvValueTwo, tvValueThree};
+
+        int size = list.size() >= 3 ? 3 : list.size();
+        for (int i = 0; i < size; i++) {
+            sku[i].setVisibility(View.VISIBLE);
+            tvKey[i].setText(list.get(i).getName());
+            tvValue[i].setText(list.get(i).getValue());
+        }
+    }
+
+    @Override
+    public void showDetail(List<ProductDetailsResponse.ItemDetailBean> detailList) {
+        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(this);
+        linearLayoutManager.setSmoothScrollbarEnabled(true);
+        linearLayoutManager.setAutoMeasureEnabled(true);
+        recyclerView.setHasFixedSize(true);
+        recyclerView.setNestedScrollingEnabled(false);
+        recyclerView.setLayoutManager(linearLayoutManager);
+
+        DetailsAdapter adapter = new DetailsAdapter(detailList);
+        recyclerView.setAdapter(adapter);
+    }
+
+    @Override
+    public void showLabel(List<ProductDetailsResponse.ItemLabelBean> labelList) {
+
+    }
+
+    @Override
+    public void showReading(List<ProductDetailsResponse.BuyerReadingBean> readingList) {
+
+    }
+
+    @Override
+    public void setPresenter(ProductDetailsContract.Presenter presenter) {
+        if (presenter == null) {
+            throw new NullPointerException();
+        }
+
+        this.presenter = presenter;
+    }
+
+    @Override
+    public void showError(Throwable e) {
+
+    }
+
+    class CommentImageAdapter extends BaseQuickAdapter<String, BaseViewHolder> {
+
+        public CommentImageAdapter(List<String> list) {
+            super(R.layout.item_product_details_comment_images, list);
+        }
+
+        @Override
+        protected void convert(BaseViewHolder holder, String s) {
+            holder.addOnClickListener(R.id.sdv_product_details_images);
+
+            SimpleDraweeView view = holder.getView(R.id.sdv_product_details_images);
+            FrescoUtils.loadImage(s, view);
+        }
+    }
+
+    class DetailsAdapter extends BaseQuickAdapter<ProductDetailsResponse.ItemDetailBean, BaseViewHolder> {
+
+        public DetailsAdapter(List<ProductDetailsResponse.ItemDetailBean> list) {
+            super(R.layout.item_product_detail, list);
+        }
+
+        @Override
+        protected void convert(BaseViewHolder holder, ProductDetailsResponse.ItemDetailBean itemDetailBean) {
+            int type = itemDetailBean.getType();
+            if (type == 3) {
+                holder.setVisible(R.id.tv_product_detail, false)
+                        .setVisible(R.id.view_product_detail, true);
+                SimpleDraweeView view = holder.getView(R.id.view_product_detail);
+                FrescoUtils.loadImage(itemDetailBean.getContent(), view);
+            } else {
+                holder.setVisible(R.id.tv_product_detail, true)
+                        .setVisible(R.id.view_product_detail, false)
+                        .setText(R.id.tv_product_detail, itemDetailBean.getContent());
+            }
+        }
+    }
+
+}
